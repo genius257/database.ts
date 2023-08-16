@@ -787,6 +787,111 @@ export class Builder<T extends Record<string, any> = Record<string, any>> {
 
         return this;
     }
+
+    public when(): HigherOrderWhenProxy<this>
+    public when<T>(value: ((query: this) => T)|T): HigherOrderWhenProxy<this>
+    public when<V, T>(value:((query: this) => V)|V, callback:((query: this, value: V)=>T), $default?:((query: this, value: V)=> T)): this|Exclude<T, null|undefined|void>
+    public when<V, T>(value:((query: this) => V)|V|null = null, callback:((query: this, value: V)=>T)|null = null, $default:((query: this, value: V)=> T)|null = null): this|Exclude<T, null|undefined|void> {
+        value = typeof value === "function" ? value(this) : value;
+
+        if (value === null) {
+            return new HigherOrderWhenProxy(this);
+        }
+
+        if (callback === null) {
+            return (new HigherOrderWhenProxy(this)).condition(value);
+        }
+
+        if (value) {
+            return callback(this, value) ?? this;
+        } else if ($default) {
+            return $default(this, value) ?? this;
+        }
+
+        return this;
+    }
+
+    //FIXME: add method overloads based on usage in unit tests.
+    public unless<T, V>(
+        value: ((query: this) => T)|T|null = null,
+        callback: ((query: this, value: T) => V)|null = null,
+        $default: ((query: this, value: T) => V)|null = null
+    ): this|Exclude<V, null|undefined|void> {
+        value = typeof value === "function" ? value(this) : value;
+
+        if (value === null) {
+            return (new HigherOrderWhenProxy(this)).negateConditionOnCapture();
+        }
+
+        if (callback === null) {
+            return (new HigherOrderWhenProxy(this)).condition(!value);
+        }
+
+        if (!value) {
+            return callback(this, value) ?? this;
+        } else if ($default !== null) {
+            return $default(this, value) ?? this;
+        }
+
+        return this;
+    }
+
+    public orWhereBetween(column: Expression|string, values: unknown[]): this {
+        return this.whereBetween(column, values, 'or');
+    }
+
+    public orWhereNotBetween(column: Expression|string, values: unknown[]): this {
+        return this.whereNotBetween(column, values, 'or');
+    }
+
+    public whereNotBetween(column: Expression|string, values: unknown[], boolean: string = 'and'): this {
+        return this.whereBetween(column, values, boolean, true);
+    }
+
+    public whereBetweenColumns(column: Expression|string, values: unknown[], boolean: string = 'and', not: boolean = false): this {
+        const type: Where['type'] = 'betweenColumns';
+
+        this._wheres.push({
+            type,
+            column,
+            values,
+            boolean,
+            not
+        });
+
+        return this;
+    }
+
+    public whereNotBetweenColumns(column: Expression|string, values: unknown[], boolean: string = 'and'): this {
+        return this.whereBetweenColumns(column, values, boolean, true);
+    }
+
+    public orWhereBetweenColumns(column: Expression|string, values: unknown[]): this {
+        return this.whereBetweenColumns(column, values, 'or');
+    }
+
+    public orWhereNotBetweenColumns(column: Expression|string, values: unknown[]): this {
+        return this.whereBetweenColumns(column, values, 'or');
+    }
+
+    //FIXME: add method override signatures, based on usage in unit tests.
+    public orWhere(column: Function|string|unknown[]|Expression, operator: unknown = null, value: unknown = null): this {
+        [value, operator] = this.prepareValueAndOperator(value, operator, arguments.length === 2);
+
+        return this.where(column, operator, value, 'or');
+    }
+
+    public orWhereNot(column: Function|string|unknown[]|Expression, operator: unknown = null, value: unknown = null): this {
+        return this.whereNot(column, operator, value, 'or');
+    }
+
+    public whereNot(column: Function|string|unknown[]|Expression, operator: unknown = null, value: unknown = null, boolean: string = 'and'): this {
+        if (Array.isArray(column)) {
+            return this.whereNested((query: Builder) => query.where(column, operator, value, boolean), `${boolean} not`);
+        }
+
+        return this.where(column, operator, value, `${boolean} not`);
+    }
 }
 
 class ConditionExpression {

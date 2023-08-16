@@ -1,12 +1,42 @@
-import { expect, test } from 'vitest'
-import Builder from "./Builder";
+//import { expect, test } from 'vitest'
+import {/*describe, */expect, test} from '@jest/globals';
 import Grammar from "./Grammars/Grammar";
+import MySqlGrammar from './Grammars/MySqlGrammar';
+import PostgresGrammar from './Grammars/PostgresGrammar';
+import SQLiteGrammar from './Grammars/SQLiteGrammar';
+import SqlServerGrammar from './Grammars/SqlServerGrammar';
+import Builder from "./Builder";
 import { JoinClause } from '.';
+import Raw from './Expression';
 
 function getBuilder() {
     const grammar = new Grammar();
 
     return new Builder(grammar);
+}
+
+function getMysqlBuilder() {
+    const grammar = new MySqlGrammar();
+
+    return new MySqlBuilder(grammar);
+}
+
+function getPostgresBuilder() {
+    const grammar = new PostgresGrammar();
+
+    return new PostgresBuilder(grammar);
+}
+
+function getSQLiteBuilder() {
+    const grammar = new SQLiteGrammar();
+
+    return new SQLiteBuilder(grammar);
+}
+
+function getSqlServerBuilder() {
+    const grammar = new SqlServerGrammar();
+
+    return new SqlServerBuilder(grammar);
 }
 
 test('Basic select', () => {
@@ -177,7 +207,7 @@ test('BasicSelectDistinctOnColumns', () =>
     builder.distinct('foo').select('foo', 'bar').from('users');
     expect('select distinct "foo", "bar" from "users"').toBe(builder.toSql());
 
-    const builder = $this.getPostgresBuilder();
+    const builder = getPostgresBuilder();
     builder.distinct('foo').select('foo', 'bar').from('users');
     expect('select distinct on ("foo") "foo", "bar" from "users"').toBe(builder.toSql());
 })
@@ -216,15 +246,15 @@ test('BasicTableWrapping', () =>
 
 test('WhenCallback', () =>
 {
-    const callback = function ($query: Builder, $condition) {
-        $this.assertTrue($condition);
+    const callback = function ($query: Builder, condition: boolean) {
+        expect(condition).toBe(true);
 
         $query.where('id', '=', 1);
     };
 
     let builder = getBuilder();
     builder.select(['*']).from('users').when(true, callback).where('email', 'foo');
-    expect('select * from "users" where "id" = ? and "email" = ?').toBe(builder.toSql());
+    expect(builder.toSql()).toBe('select * from "users" where "id" = ? and "email" = ?');
 
     builder = getBuilder();
     builder.select(['*']).from('users').when(false, callback).where('email', 'foo');
@@ -233,15 +263,15 @@ test('WhenCallback', () =>
 
 test('WhenCallbackWithReturn', () =>
 {
-    const callback = function ($query, $condition) {
-        $this.assertTrue($condition);
+    const callback = function (query: Builder, condition: boolean) {
+        expect(condition).toBe(true);
 
-        return $query.where('id', '=', 1);
+        return query.where('id', '=', 1);
     };
 
     let builder = getBuilder();
     builder.select(['*']).from('users').when(true, callback).where('email', 'foo');
-    expect('select * from "users" where "id" = ? and "email" = ?').toBe(builder.toSql());
+    expect(builder.toSql()).toBe('select * from "users" where "id" = ? and "email" = ?');
 
     builder = getBuilder();
     builder.select(['*']).from('users').when(false, callback).where('email', 'foo');
@@ -250,13 +280,13 @@ test('WhenCallbackWithReturn', () =>
 
 test('WhenCallbackWithDefault', () =>
 {
-    const callback = function ($query: Builder, condition: string) {
+    const callback = function ($query: Builder, condition: string|number) {
         expect(condition).toBe('truthy');
 
         $query.where('id', '=', 1);
     };
 
-    const _default = function (query: Builder, condition: string) {
+    const _default = function (query: Builder, condition: string|number) {
         expect(condition).toBe(0);
 
         query.where('id', '=', 2);  
@@ -264,12 +294,12 @@ test('WhenCallbackWithDefault', () =>
 
     let builder = getBuilder();
     builder.select(['*']).from('users').when('truthy', callback, _default).where('email', 'foo');
-    expect('select * from "users" where "id" = ? and "email" = ?').toBe(builder.toSql());
+    expect(builder.toSql()).toBe('select * from "users" where "id" = ? and "email" = ?');
     expect(builder.getBindings()).toBe([1, 'foo']);
 
     builder = getBuilder();
     builder.select(['*']).from('users').when(0, callback, _default).where('email', 'foo');
-    expect('select * from "users" where "id" = ? and "email" = ?').toBe(builder.toSql());
+    expect(builder.toSql()).toBe('select * from "users" where "id" = ? and "email" = ?');
     expect(builder.getBindings()).toBe([2, 'foo']);
 })
 
@@ -283,7 +313,7 @@ test('UnlessCallback', () =>
 
     let builder = getBuilder();
     builder.select(['*']).from('users').unless(false, callback).where('email', 'foo');
-    expect('select * from "users" where "id" = ? and "email" = ?').toBe(builder.toSql());
+    expect(builder.toSql()).toBe('select * from "users" where "id" = ? and "email" = ?');
 
     builder = getBuilder();
     builder.select(['*']).from('users').unless(true, callback).where('email', 'foo');
@@ -300,7 +330,7 @@ test('UnlessCallbackWithReturn', () =>
 
     let builder = getBuilder();
     builder.select(['*']).from('users').unless(false, callback).where('email', 'foo');
-    expect('select * from "users" where "id" = ? and "email" = ?').toBe(builder.toSql());
+    expect(builder.toSql()).toBe('select * from "users" where "id" = ? and "email" = ?');
 
     builder = getBuilder();
     builder.select(['*']).from('users').unless(true, callback).where('email', 'foo');
@@ -315,32 +345,32 @@ test('UnlessCallbackWithDefault', () =>
         query.where('id', '=', 1);
     };
 
-    const $default = function ($query, $condition) {
-        expect('truthy', $condition);
+    const $default = function (query: Builder, condition: number) {
+        expect(condition).toBe('truthy');
 
-        $query.where('id', '=', 2);
+        query.where('id', '=', 2);
     };
 
     let builder = getBuilder();
-    builder.select(['*']).from('users').unless(0, $callback, $default).where('email', 'foo');
-    expect('select * from "users" where "id" = ? and "email" = ?').toBe(builder.toSql());
-    $this.assertEquals([1, 'foo'], builder.getBindings());
+    builder.select(['*']).from('users').unless(0, callback, $default).where('email', 'foo');
+    expect(builder.toSql()).toBe('select * from "users" where "id" = ? and "email" = ?');
+    expect(builder.getBindings()).toBe([1, 'foo']);
 
     builder = getBuilder();
     builder.select(['*']).from('users').unless('truthy', $callback, $default).where('email', 'foo');
-    expect('select * from "users" where "id" = ? and "email" = ?').toBe(builder.toSql());
-    $this.assertEquals([2, 'foo'], builder.getBindings());
+    expect(builder.toSql()).toBe('select * from "users" where "id" = ? and "email" = ?');
+    expect(builder.getBindings()).toBe([2, 'foo']);
 })
 
 test('TapCallback', () =>
 {
-    $callback = function ($query) {
-        return $query.where('id', '=', 1);
+    const callback = function (query: Builder) {
+        return query.where('id', '=', 1);
     };
 
     const builder = getBuilder();
-    builder.select(['*']).from('users').tap($callback).where('email', 'foo');
-    expect('select * from "users" where "id" = ? and "email" = ?').toBe(builder.toSql());
+    builder.select(['*']).from('users').tap(callback).where('email', 'foo');
+    expect(builder.toSql()).toBe('select * from "users" where "id" = ? and "email" = ?');
 })
 
 test('BasicWheres', () =>
@@ -348,7 +378,7 @@ test('BasicWheres', () =>
     const builder = getBuilder();
     builder.select(['*']).from('users').where('id', '=', 1);
     expect('select * from "users" where "id" = ?').toBe(builder.toSql());
-    $this.assertEquals([1], builder.getBindings());
+    expect(builder.getBindings()).toBe([1]);
 })
 
 test('BasicWhereNot', () =>
@@ -356,7 +386,7 @@ test('BasicWhereNot', () =>
     const builder = getBuilder();
     builder.select(['*']).from('users').whereNot('name', 'foo').whereNot('name', '<>', 'bar');
     expect('select * from "users" where not "name" = ? and not "name" <> ?').toBe(builder.toSql());
-    $this.assertEquals(['foo', 'bar'], builder.getBindings());
+    expect(builder.getBindings()).toBe(['foo', 'bar']);
 })
 
 test('WheresWithArrayValue', () =>
@@ -364,70 +394,70 @@ test('WheresWithArrayValue', () =>
     let builder = getBuilder();
     builder.select(['*']).from('users').where('id', [12]);
     expect('select * from "users" where "id" = ?').toBe(builder.toSql());
-    $this.assertEquals([12], builder.getBindings());
+    expect(builder.getBindings()).toBe([12]);
 
     builder = getBuilder();
     builder.select(['*']).from('users').where('id', '=', [12, 30]);
     expect('select * from "users" where "id" = ?').toBe(builder.toSql());
-    $this.assertEquals([12], builder.getBindings());
+    expect(builder.getBindings()).toBe([12]);
 
     builder = getBuilder();
     builder.select(['*']).from('users').where('id', '!=', [12, 30]);
     expect('select * from "users" where "id" != ?').toBe(builder.toSql());
-    $this.assertEquals([12], builder.getBindings());
+    expect(builder.getBindings()).toBe([12]);
 
     builder = getBuilder();
     builder.select(['*']).from('users').where('id', '<>', [12, 30]);
     expect('select * from "users" where "id" <> ?').toBe(builder.toSql());
-    $this.assertEquals([12], builder.getBindings());
+    expect(builder.getBindings()).toBe([12]);
 
     builder = getBuilder();
     builder.select(['*']).from('users').where('id', '=', [[12, 30]]);
     expect('select * from "users" where "id" = ?').toBe(builder.toSql());
-    $this.assertEquals([12], builder.getBindings());
+    expect(builder.getBindings()).toBe([12]);
 })
 
 test('MySqlWrappingProtectsQuotationMarks', () =>
 {
-    const builder = $this.getMysqlBuilder();
+    const builder = getMysqlBuilder();
     builder.select(['*']).From('some`table');
     expect('select * from `some``table`').toBe(builder.toSql());
 })
 
 test('DateBasedWheresAcceptsTwoArguments', () =>
 {
-    const builder = $this.getMysqlBuilder();
+    let builder = getMysqlBuilder();
     builder.select(['*']).from('users').whereDate('created_at', 1);
     expect('select * from `users` where date(`created_at`) = ?').toBe(builder.toSql());
 
-    builder = $this.getMysqlBuilder();
+    builder = getMysqlBuilder();
     builder.select(['*']).from('users').whereDay('created_at', 1);
     expect('select * from `users` where day(`created_at`) = ?').toBe(builder.toSql());
 
-    builder = $this.getMysqlBuilder();
+    builder = getMysqlBuilder();
     builder.select(['*']).from('users').whereMonth('created_at', 1);
     expect('select * from `users` where month(`created_at`) = ?').toBe(builder.toSql());
 
-    builder = $this.getMysqlBuilder();
+    builder = getMysqlBuilder();
     builder.select(['*']).from('users').whereYear('created_at', 1);
     expect('select * from `users` where year(`created_at`) = ?').toBe(builder.toSql());
 })
 
 test('DateBasedOrWheresAcceptsTwoArguments', () =>
 {
-    const builder = $this.getMysqlBuilder();
+    let builder = getMysqlBuilder();
     builder.select(['*']).from('users').where('id', 1).orWhereDate('created_at', 1);
     expect('select * from `users` where `id` = ? or date(`created_at`) = ?').toBe(builder.toSql());
 
-    builder = $this.getMysqlBuilder();
+    builder = getMysqlBuilder();
     builder.select(['*']).from('users').where('id', 1).orWhereDay('created_at', 1);
     expect('select * from `users` where `id` = ? or day(`created_at`) = ?').toBe(builder.toSql());
 
-    builder = $this.getMysqlBuilder();
+    builder = getMysqlBuilder();
     builder.select(['*']).from('users').where('id', 1).orWhereMonth('created_at', 1);
     expect('select * from `users` where `id` = ? or month(`created_at`) = ?').toBe(builder.toSql());
 
-    builder = $this.getMysqlBuilder();
+    builder = getMysqlBuilder();
     builder.select(['*']).from('users').where('id', 1).orWhereYear('created_at', 1);
     expect('select * from `users` where `id` = ? or year(`created_at`) = ?').toBe(builder.toSql());
 })
@@ -436,47 +466,47 @@ test('DateBasedWheresExpressionIsNotBound', () =>
 {
     let builder = getBuilder();
     builder.select(['*']).from('users').whereDate('created_at', new Raw('NOW()')).where('admin', true);
-    $this.assertEquals([true], builder.getBindings());
+    expect(builder.getBindings()).toBe([true]);
 
     builder = getBuilder();
     builder.select(['*']).from('users').whereDay('created_at', new Raw('NOW()'));
-    $this.assertEquals([], builder.getBindings());
+    expect(builder.getBindings()).toBe([]);
 
     builder = getBuilder();
     builder.select(['*']).from('users').whereMonth('created_at', new Raw('NOW()'));
-    $this.assertEquals([], builder.getBindings());
+    expect(builder.getBindings()).toBe([]);
 
     builder = getBuilder();
     builder.select(['*']).from('users').whereYear('created_at', new Raw('NOW()'));
-    $this.assertEquals([], builder.getBindings());
+    expect(builder.getBindings()).toBe([]);
 })
 
 test('WhereDateMySql', () =>
 {
-    const builder = $this.getMysqlBuilder();
+    let builder = getMysqlBuilder();
     builder.select(['*']).from('users').whereDate('created_at', '=', '2015-12-21');
     expect('select * from `users` where date(`created_at`) = ?').toBe(builder.toSql());
-    $this.assertEquals(['2015-12-21'], builder.getBindings());
+    expect(builder.getBindings()).toBe(['2015-12-21']);
 
-    builder = $this.getMysqlBuilder();
+    builder = getMysqlBuilder();
     builder.select(['*']).from('users').whereDate('created_at', '=', new Raw('NOW()'));
-    expect('select * from `users` where date(`created_at`) = NOW()').toBe(builder.toSql());
+    expect(builder.toSql()).toBe('select * from `users` where date(`created_at`) = NOW()');
 })
 
 test('WhereDayMySql', () =>
 {
-    const builder = $this.getMysqlBuilder();
+    const builder = getMysqlBuilder();
     builder.select(['*']).from('users').whereDay('created_at', '=', 1);
     expect('select * from `users` where day(`created_at`) = ?').toBe(builder.toSql());
-    $this.assertEquals([1], builder.getBindings());
+    expect(builder.getBindings()).toBe([1]);
 })
 
 test('OrWhereDayMySql', () =>
 {
-    const builder = $this.getMysqlBuilder();
+    const builder = getMysqlBuilder();
     builder.select(['*']).from('users').whereDay('created_at', '=', 1).orWhereDay('created_at', '=', 2);
     expect('select * from `users` where day(`created_at`) = ? or day(`created_at`) = ?').toBe(builder.toSql());
-    $this.assertEquals([1, 2], builder.getBindings());
+    expect(builder.getBindings()).toBe([1, 2]);
 })
 
 test('OrWhereDayPostgres', () =>
@@ -484,7 +514,7 @@ test('OrWhereDayPostgres', () =>
     const builder = getPostgresBuilder();
     builder.select(['*']).from('users').whereDay('created_at', '=', 1).orWhereDay('created_at', '=', 2);
     expect('select * from "users" where extract(day from "created_at") = ? or extract(day from "created_at") = ?').toBe(builder.toSql());
-    $this.assertEquals([1, 2], builder.getBindings());
+    expect(builder.getBindings()).toBe([1, 2]);
 })
 
 test('OrWhereDaySqlServer', () =>
@@ -492,113 +522,113 @@ test('OrWhereDaySqlServer', () =>
     const builder = getSqlServerBuilder();
     builder.select(['*']).from('users').whereDay('created_at', '=', 1).orWhereDay('created_at', '=', 2);
     expect('select * from [users] where day([created_at]) = ? or day([created_at]) = ?').toBe(builder.toSql());
-    $this.assertEquals([1, 2], builder.getBindings());
+    expect(builder.getBindings()).toBe([1, 2]);
 })
 
 test('WhereMonthMySql', () =>
 {
-    const builder = $this.getMysqlBuilder();
+    const builder = getMysqlBuilder();
     builder.select(['*']).from('users').whereMonth('created_at', '=', 5);
     expect('select * from `users` where month(`created_at`) = ?').toBe(builder.toSql());
-    $this.assertEquals([5], builder.getBindings());
+    expect(builder.getBindings()).toBe([5]);
 })
 
 test('OrWhereMonthMySql', () =>
 {
-    const builder = $this.getMysqlBuilder();
+    const builder = getMysqlBuilder();
     builder.select(['*']).from('users').whereMonth('created_at', '=', 5).orWhereMonth('created_at', '=', 6);
     expect('select * from `users` where month(`created_at`) = ? or month(`created_at`) = ?').toBe(builder.toSql());
-    $this.assertEquals([5, 6], builder.getBindings());
+    expect(builder.getBindings()).toBe([5, 6]);
 })
 
 test('OrWhereMonthPostgres', () =>
 {
-    const builder = $this.getPostgresBuilder();
+    const builder = getPostgresBuilder();
     builder.select(['*']).from('users').whereMonth('created_at', '=', 5).orWhereMonth('created_at', '=', 6);
     expect('select * from "users" where extract(month from "created_at") = ? or extract(month from "created_at") = ?').toBe(builder.toSql());
-    $this.assertEquals([5, 6], builder.getBindings());
+    expect(builder.getBindings()).toBe([5, 6]);
 })
 
 test('OrWhereMonthSqlServer', () =>
 {
-    const builder = $this.getSqlServerBuilder();
+    const builder = getSqlServerBuilder();
     builder.select(['*']).from('users').whereMonth('created_at', '=', 5).orWhereMonth('created_at', '=', 6);
     expect('select * from [users] where month([created_at]) = ? or month([created_at]) = ?').toBe(builder.toSql());
-    $this.assertEquals([5, 6], builder.getBindings());
+    expect(builder.getBindings()).toBe([5, 6]);
 })
 
 test('WhereYearMySql', () =>
 {
-    const builder = $this.getMysqlBuilder();
+    const builder = getMysqlBuilder();
     builder.select(['*']).from('users').whereYear('created_at', '=', 2014);
     expect('select * from `users` where year(`created_at`) = ?').toBe(builder.toSql());
-    $this.assertEquals([2014], builder.getBindings());
+    expect(builder.getBindings()).toBe([2014]);
 })
 
 test('OrWhereYearMySql', () =>
 {
-    const builder = $this.getMysqlBuilder();
+    const builder = getMysqlBuilder();
     builder.select(['*']).from('users').whereYear('created_at', '=', 2014).orWhereYear('created_at', '=', 2015);
     expect('select * from `users` where year(`created_at`) = ? or year(`created_at`) = ?').toBe(builder.toSql());
-    $this.assertEquals([2014, 2015], builder.getBindings());
+    expect(builder.getBindings()).toBe([2014, 2015]);
 })
 
 test('OrWhereYearPostgres', () =>
 {
-    const builder = $this.getPostgresBuilder();
+    const builder = getPostgresBuilder();
     builder.select(['*']).from('users').whereYear('created_at', '=', 2014).orWhereYear('created_at', '=', 2015);
     expect('select * from "users" where extract(year from "created_at") = ? or extract(year from "created_at") = ?').toBe(builder.toSql());
-    $this.assertEquals([2014, 2015], builder.getBindings());
+    expect(builder.getBindings()).toBe([2014, 2015]);
 })
 
 test('OrWhereYearSqlServer', () =>
 {
-    const builder = $this.getSqlServerBuilder();
+    const builder = getSqlServerBuilder();
     builder.select(['*']).from('users').whereYear('created_at', '=', 2014).orWhereYear('created_at', '=', 2015);
     expect('select * from [users] where year([created_at]) = ? or year([created_at]) = ?').toBe(builder.toSql());
-    $this.assertEquals([2014, 2015], builder.getBindings());
+    expect(builder.getBindings()).toBe([2014, 2015]);
 })
 
 test('WhereTimeMySql', () =>
 {
-    const builder = $this.getMysqlBuilder();
+    const builder = getMysqlBuilder();
     builder.select(['*']).from('users').whereTime('created_at', '>=', '22:00');
     expect('select * from `users` where time(`created_at`) >= ?').toBe(builder.toSql());
-    $this.assertEquals(['22:00'], builder.getBindings());
+    expect(builder.getBindings()).toBe(['22:00']);
 })
 
 test('WhereTimeOperatorOptionalMySql', () =>
 {
-    const builder = $this.getMysqlBuilder();
+    const builder = getMysqlBuilder();
     builder.select(['*']).from('users').whereTime('created_at', '22:00');
     expect('select * from `users` where time(`created_at`) = ?').toBe(builder.toSql());
-    $this.assertEquals(['22:00'], builder.getBindings());
+    expect(builder.getBindings()).toBe(['22:00']);
 })
 
 test('WhereTimeOperatorOptionalPostgres', () =>
 {
-    const builder = $this.getPostgresBuilder();
+    const builder = getPostgresBuilder();
     builder.select(['*']).from('users').whereTime('created_at', '22:00');
     expect('select * from "users" where "created_at"::time = ?').toBe(builder.toSql());
-    $this.assertEquals(['22:00'], builder.getBindings());
+    expect(builder.getBindings()).toBe(['22:00']);
 })
 
 test('WhereTimeSqlServer', () =>
 {
-    const builder = $this.getSqlServerBuilder();
+    const builder = getSqlServerBuilder();
     builder.select(['*']).from('users').whereTime('created_at', '22:00');
     expect('select * from [users] where cast([created_at] as time) = ?').toBe(builder.toSql());
-    $this.assertEquals(['22:00'], builder.getBindings());
+    expect(builder.getBindings()).toBe(['22:00']);
 
-    builder = $this.getSqlServerBuilder();
+    builder = getSqlServerBuilder();
     builder.select(['*']).from('users').whereTime('created_at', new Raw('NOW()'));
     expect('select * from [users] where cast([created_at] as time) = NOW()').toBe(builder.toSql());
-    $this.assertEquals([], builder.getBindings());
+    expect(builder.getBindings()).toBe([]);
 })
 
 test('OrWhereTimeMySql', () =>
 {
-    const builder = $this.getMysqlBuilder();
+    const builder = getMysqlBuilder();
     builder.select(['*']).from('users').whereTime('created_at', '<=', '10:00').orWhereTime('created_at', '>=', '22:00');
     expect('select * from `users` where time(`created_at`) <= ? or time(`created_at`) >= ?').toBe(builder.toSql());
     $this.assertEquals(['10:00', '22:00'], builder.getBindings());
@@ -606,7 +636,7 @@ test('OrWhereTimeMySql', () =>
 
 test('OrWhereTimePostgres', () =>
 {
-    const builder = $this.getPostgresBuilder();
+    const builder = getPostgresBuilder();
     builder.select(['*']).from('users').whereTime('created_at', '<=', '10:00').orWhereTime('created_at', '>=', '22:00');
     expect('select * from "users" where "created_at"::time <= ? or "created_at"::time >= ?').toBe(builder.toSql());
     $this.assertEquals(['10:00', '22:00'], builder.getBindings());
@@ -614,12 +644,12 @@ test('OrWhereTimePostgres', () =>
 
 test('OrWhereTimeSqlServer', () =>
 {
-    const builder = $this.getSqlServerBuilder();
+    const builder = getSqlServerBuilder();
     builder.select(['*']).from('users').whereTime('created_at', '<=', '10:00').orWhereTime('created_at', '>=', '22:00');
     expect('select * from [users] where cast([created_at] as time) <= ? or cast([created_at] as time) >= ?').toBe(builder.toSql());
     $this.assertEquals(['10:00', '22:00'], builder.getBindings());
 
-    builder = $this.getSqlServerBuilder();
+    builder = getSqlServerBuilder();
     builder.select(['*']).from('users').whereTime('created_at', '<=', '10:00').orWhereTime('created_at', new Raw('NOW()'));
     expect('select * from [users] where cast([created_at] as time) <= ? or cast([created_at] as time) = NOW()').toBe(builder.toSql());
     $this.assertEquals(['10:00'], builder.getBindings());
@@ -627,162 +657,162 @@ test('OrWhereTimeSqlServer', () =>
 
 test('WhereDatePostgres', () =>
 {
-    const builder = $this.getPostgresBuilder();
+    const builder = getPostgresBuilder();
     builder.select(['*']).from('users').whereDate('created_at', '=', '2015-12-21');
     expect('select * from "users" where "created_at"::date = ?').toBe(builder.toSql());
-    $this.assertEquals(['2015-12-21'], builder.getBindings());
+    expect(builder.getBindings()).toBe(['2015-12-21']);
 
-    builder = $this.getPostgresBuilder();
+    builder = getPostgresBuilder();
     builder.select(['*']).from('users').whereDate('created_at', new Raw('NOW()'));
     expect('select * from "users" where "created_at"::date = NOW()').toBe(builder.toSql());
 })
 
 test('WhereDayPostgres', () =>
 {
-    const builder = $this.getPostgresBuilder();
+    const builder = getPostgresBuilder();
     builder.select(['*']).from('users').whereDay('created_at', '=', 1);
     expect('select * from "users" where extract(day from "created_at") = ?').toBe(builder.toSql());
-    $this.assertEquals([1], builder.getBindings());
+    expect(builder.getBindings()).toBe([1]);
 })
 
 test('WhereMonthPostgres', () =>
 {
-    const builder = $this.getPostgresBuilder();
+    const builder = getPostgresBuilder();
     builder.select(['*']).from('users').whereMonth('created_at', '=', 5);
     expect('select * from "users" where extract(month from "created_at") = ?').toBe(builder.toSql());
-    $this.assertEquals([5], builder.getBindings());
+    expect(builder.getBindings()).toBe([5]);
 })
 
 test('WhereYearPostgres', () =>
 {
-    const builder = $this.getPostgresBuilder();
+    const builder = getPostgresBuilder();
     builder.select(['*']).from('users').whereYear('created_at', '=', 2014);
     expect('select * from "users" where extract(year from "created_at") = ?').toBe(builder.toSql());
-    $this.assertEquals([2014], builder.getBindings());
+    expect(builder.getBindings()).toBe([2014]);
 })
 
 test('WhereTimePostgres', () =>
 {
-    const builder = $this.getPostgresBuilder();
+    const builder = getPostgresBuilder();
     builder.select(['*']).from('users').whereTime('created_at', '>=', '22:00');
     expect('select * from "users" where "created_at"::time >= ?').toBe(builder.toSql());
-    $this.assertEquals(['22:00'], builder.getBindings());
+    expect(builder.getBindings()).toBe(['22:00']);
 })
 
 test('WhereLikePostgres', () =>
 {
-    const builder = $this.getPostgresBuilder();
+    let builder = getPostgresBuilder();
     builder.select(['*']).from('users').where('id', 'like', '1');
     expect('select * from "users" where "id"::text like ?').toBe(builder.toSql());
-    $this.assertEquals(['1'], builder.getBindings());
+    expect(builder.getBindings()).toBe([1]);
 
-    builder = $this.getPostgresBuilder();
+    builder = getPostgresBuilder();
     builder.select(['*']).from('users').where('id', 'LIKE', '1');
     expect('select * from "users" where "id"::text LIKE ?').toBe(builder.toSql());
-    $this.assertEquals(['1'], builder.getBindings());
+    expect(builder.getBindings()).toBe([1]);
 
-    builder = $this.getPostgresBuilder();
+    builder = getPostgresBuilder();
     builder.select(['*']).from('users').where('id', 'ilike', '1');
     expect('select * from "users" where "id"::text ilike ?').toBe(builder.toSql());
-    $this.assertEquals(['1'], builder.getBindings());
+    expect(builder.getBindings()).toBe([1]);
 
-    builder = $this.getPostgresBuilder();
+    builder = getPostgresBuilder();
     builder.select(['*']).from('users').where('id', 'not like', '1');
     expect('select * from "users" where "id"::text not like ?').toBe(builder.toSql());
-    $this.assertEquals(['1'], builder.getBindings());
+    expect(builder.getBindings()).toBe([1]);
 
-    builder = $this.getPostgresBuilder();
+    builder = getPostgresBuilder();
     builder.select(['*']).from('users').where('id', 'not ilike', '1');
     expect('select * from "users" where "id"::text not ilike ?').toBe(builder.toSql());
-    $this.assertEquals(['1'], builder.getBindings());
+    expect(builder.getBindings()).toBe([1]);
 })
 
 test('WhereDateSqlite', () =>
 {
-    builder = $this.getSQLiteBuilder();
+    let builder = getSQLiteBuilder();
     builder.select(['*']).from('users').whereDate('created_at', '=', '2015-12-21');
     expect('select * from "users" where strftime(\'%Y-%m-%d\', "created_at") = cast(? as text)').toBe(builder.toSql());
-    $this.assertEquals(['2015-12-21'], builder.getBindings());
+    expect(builder.getBindings()).toBe(['2015-12-21']);
 
-    builder = $this.getSQLiteBuilder();
+    builder = getSQLiteBuilder();
     builder.select(['*']).from('users').whereDate('created_at', new Raw('NOW()'));
     expect('select * from "users" where strftime(\'%Y-%m-%d\', "created_at") = cast(NOW() as text)').toBe(builder.toSql());
 })
 
 test('WhereDaySqlite', () =>
 {
-    builder = $this.getSQLiteBuilder();
+    const builder = getSQLiteBuilder();
     builder.select(['*']).from('users').whereDay('created_at', '=', 1);
     expect('select * from "users" where strftime(\'%d\', "created_at") = cast(? as text)').toBe(builder.toSql());
-    $this.assertEquals([1], builder.getBindings());
+    expect(builder.getBindings()).toBe([1]);
 })
 
 test('WhereMonthSqlite', () =>
 {
-    builder = $this.getSQLiteBuilder();
+    const builder = getSQLiteBuilder();
     builder.select(['*']).from('users').whereMonth('created_at', '=', 5);
     expect('select * from "users" where strftime(\'%m\', "created_at") = cast(? as text)').toBe(builder.toSql());
-    $this.assertEquals([5], builder.getBindings());
+    expect(builder.getBindings()).toBe([5]);
 })
 
 test('WhereYearSqlite', () =>
 {
-    builder = $this.getSQLiteBuilder();
+    const builder = getSQLiteBuilder();
     builder.select(['*']).from('users').whereYear('created_at', '=', 2014);
     expect('select * from "users" where strftime(\'%Y\', "created_at") = cast(? as text)').toBe(builder.toSql());
-    $this.assertEquals([2014], builder.getBindings());
+    expect(builder.getBindings()).toBe([2014]);
 })
 
 test('WhereTimeSqlite', () =>
 {
-    builder = $this.getSQLiteBuilder();
+    const builder = getSQLiteBuilder();
     builder.select(['*']).from('users').whereTime('created_at', '>=', '22:00');
     expect('select * from "users" where strftime(\'%H:%M:%S\', "created_at") >= cast(? as text)').toBe(builder.toSql());
-    $this.assertEquals(['22:00'], builder.getBindings());
+    expect(builder.getBindings()).toBe(['22:00']);
 })
 
 test('WhereTimeOperatorOptionalSqlite', () =>
 {
-    builder = $this.getSQLiteBuilder();
+    const builder = getSQLiteBuilder();
     builder.select(['*']).from('users').whereTime('created_at', '22:00');
     expect('select * from "users" where strftime(\'%H:%M:%S\', "created_at") = cast(? as text)').toBe(builder.toSql());
-    $this.assertEquals(['22:00'], builder.getBindings());
+    expect(builder.getBindings()).toBe(['22:00']);
 })
 
 test('WhereDateSqlServer', () =>
 {
-    const builder = $this.getSqlServerBuilder();
+    let builder = getSqlServerBuilder();
     builder.select(['*']).from('users').whereDate('created_at', '=', '2015-12-21');
     expect('select * from [users] where cast([created_at] as date) = ?').toBe(builder.toSql());
-    $this.assertEquals(['2015-12-21'], builder.getBindings());
+    expect(builder.getBindings()).toBe(['2015-12-21']);
 
-    builder = $this.getSqlServerBuilder();
+    builder = getSqlServerBuilder();
     builder.select(['*']).from('users').whereDate('created_at', new Raw('NOW()'));
     expect('select * from [users] where cast([created_at] as date) = NOW()').toBe(builder.toSql());
 })
 
 test('WhereDaySqlServer', () =>
 {
-    const builder = $this.getSqlServerBuilder();
+    const builder = getSqlServerBuilder();
     builder.select(['*']).from('users').whereDay('created_at', '=', 1);
     expect('select * from [users] where day([created_at]) = ?').toBe(builder.toSql());
-    $this.assertEquals([1], builder.getBindings());
+    expect(builder.getBindings()).toBe([1]);
 })
 
 test('WhereMonthSqlServer', () =>
 {
-    const builder = $this.getSqlServerBuilder();
+    const builder = getSqlServerBuilder();
     builder.select(['*']).from('users').whereMonth('created_at', '=', 5);
     expect('select * from [users] where month([created_at]) = ?').toBe(builder.toSql());
-    $this.assertEquals([5], builder.getBindings());
+    expect(builder.getBindings()).toBe([5]);
 })
 
 test('WhereYearSqlServer', () =>
 {
-    const builder = $this.getSqlServerBuilder();
+    const builder = getSqlServerBuilder();
     builder.select(['*']).from('users').whereYear('created_at', '=', 2014);
     expect('select * from [users] where year([created_at]) = ?').toBe(builder.toSql());
-    $this.assertEquals([2014], builder.getBindings());
+    expect(builder.getBindings()).toBe([2014]);
 })
 
 test('WhereBetweens', () =>
@@ -790,45 +820,45 @@ test('WhereBetweens', () =>
     let builder = getBuilder();
     builder.select(['*']).from('users').whereBetween('id', [1, 2]);
     expect('select * from "users" where "id" between ? and ?').toBe(builder.toSql());
-    $this.assertEquals([1, 2], builder.getBindings());
+    expect(builder.getBindings()).toBe([1, 2]);
 
     builder = getBuilder();
     builder.select(['*']).from('users').whereBetween('id', [[1, 2, 3]]);
     expect('select * from "users" where "id" between ? and ?').toBe(builder.toSql());
-    $this.assertEquals([1, 2], builder.getBindings());
+    expect(builder.getBindings()).toBe([1, 2]);
 
     builder = getBuilder();
     builder.select(['*']).from('users').whereBetween('id', [[1], [2, 3]]);
     expect('select * from "users" where "id" between ? and ?').toBe(builder.toSql());
-    $this.assertEquals([1, 2], builder.getBindings());
+    expect(builder.getBindings()).toBe([1, 2]);
 
     builder = getBuilder();
     builder.select(['*']).from('users').whereNotBetween('id', [1, 2]);
     expect('select * from "users" where "id" not between ? and ?').toBe(builder.toSql());
-    $this.assertEquals([1, 2], builder.getBindings());
+    expect(builder.getBindings()).toBe([1, 2]);
 
     builder = getBuilder();
     builder.select(['*']).from('users').whereBetween('id', [new Raw(1), new Raw(2)]);
     expect('select * from "users" where "id" between 1 and 2').toBe(builder.toSql());
-    $this.assertEquals([], builder.getBindings());
+    expect(builder.getBindings()).toBe([]);
 
     builder = getBuilder();
-    $period = now().toPeriod(now().addDay());
+    let $period = now().toPeriod(now().addDay());
     builder.select(['*']).from('users').whereBetween('created_at', $period);
     expect('select * from "users" where "created_at" between ? and ?').toBe(builder.toSql());
-    $this.assertEquals([$period.start, $period.end], builder.getBindings());
+    expect(builder.getBindings()).toBe([$period.start, $period.end]);
 
     // custom long carbon period date
     builder = getBuilder();
     $period = now().toPeriod(now().addMonth());
     builder.select(['*']).from('users').whereBetween('created_at', $period);
     expect('select * from "users" where "created_at" between ? and ?').toBe(builder.toSql());
-    $this.assertEquals([$period.start, $period.end], builder.getBindings());
+    expect(builder.getBindings()).toBe([$period.start, $period.end]);
 
     builder = getBuilder();
     builder.select(['*']).from('users').whereBetween('id', collect([1, 2]));
     expect('select * from "users" where "id" between ? and ?').toBe(builder.toSql());
-    $this.assertEquals([1, 2], builder.getBindings());
+    expect(builder.getBindings()).toBe([1, 2]);
 })
 
 test('OrWhereBetween', () =>
@@ -836,17 +866,17 @@ test('OrWhereBetween', () =>
     let builder = getBuilder();
     builder.select(['*']).from('users').where('id', '=', 1).orWhereBetween('id', [3, 5]);
     expect('select * from "users" where "id" = ? or "id" between ? and ?').toBe(builder.toSql());
-    $this.assertEquals([1, 3, 5], builder.getBindings());
+    expect(builder.getBindings()).toBe([1, 3, 5]);
 
     builder = getBuilder();
     builder.select(['*']).from('users').where('id', '=', 1).orWhereBetween('id', [[3, 4, 5]]);
     expect('select * from "users" where "id" = ? or "id" between ? and ?').toBe(builder.toSql());
-    $this.assertEquals([1, 3, 4], builder.getBindings());
+    expect(builder.getBindings()).toBe([1, 3, 4]);
 
     builder = getBuilder();
     builder.select(['*']).from('users').where('id', '=', 1).orWhereBetween('id', [[3, 5]]);
     expect('select * from "users" where "id" = ? or "id" between ? and ?').toBe(builder.toSql());
-    $this.assertEquals([1, 3, 5], builder.getBindings());
+    expect(builder.getBindings()).toBe([1, 3, 5]);
 
     builder = getBuilder();
     builder.select(['*']).from('users').where('id', '=', 1).orWhereBetween('id', [[4], [6, 8]]);
@@ -856,12 +886,12 @@ test('OrWhereBetween', () =>
     builder = getBuilder();
     builder.select(['*']).from('users').where('id', '=', 1).orWhereBetween('id', collect([3, 4]));
     expect('select * from "users" where "id" = ? or "id" between ? and ?').toBe(builder.toSql());
-    $this.assertEquals([1, 3, 4], builder.getBindings());
+    expect(builder.getBindings()).toBe([1, 3, 4]);
 
     builder = getBuilder();
     builder.select(['*']).from('users').where('id', '=', 1).orWhereBetween('id', [new Raw(3), new Raw(4)]);
     expect('select * from "users" where "id" = ? or "id" between 3 and 4').toBe(builder.toSql());
-    $this.assertEquals([1], builder.getBindings());
+    expect(builder.getBindings()).toBe([1]);
 })
 
 test('OrWhereNotBetween', () =>
@@ -869,17 +899,17 @@ test('OrWhereNotBetween', () =>
     let builder = getBuilder();
     builder.select(['*']).from('users').where('id', '=', 1).orWhereNotBetween('id', [3, 5]);
     expect('select * from "users" where "id" = ? or "id" not between ? and ?').toBe(builder.toSql());
-    $this.assertEquals([1, 3, 5], builder.getBindings());
+    expect(builder.getBindings()).toBe([1, 3, 5]);
 
     builder = getBuilder();
     builder.select(['*']).from('users').where('id', '=', 1).orWhereNotBetween('id', [[3, 4, 5]]);
     expect('select * from "users" where "id" = ? or "id" not between ? and ?').toBe(builder.toSql());
-    $this.assertEquals([1, 3, 4], builder.getBindings());
+    expect(builder.getBindings()).toBe([1, 3, 4]);
 
     builder = getBuilder();
     builder.select(['*']).from('users').where('id', '=', 1).orWhereNotBetween('id', [[3, 5]]);
     expect('select * from "users" where "id" = ? or "id" not between ? and ?').toBe(builder.toSql());
-    $this.assertEquals([1, 3, 5], builder.getBindings());
+    expect(builder.getBindings()).toBe([1, 3, 5]);
 
     builder = getBuilder();
     builder.select(['*']).from('users').where('id', '=', 1).orWhereNotBetween('id', [[4], [6, 8]]);
@@ -889,12 +919,12 @@ test('OrWhereNotBetween', () =>
     builder = getBuilder();
     builder.select(['*']).from('users').where('id', '=', 1).orWhereNotBetween('id', collect([3, 4]));
     expect('select * from "users" where "id" = ? or "id" not between ? and ?').toBe(builder.toSql());
-    $this.assertEquals([1, 3, 4], builder.getBindings());
+    expect(builder.getBindings()).toBe([1, 3, 4]);
 
     builder = getBuilder();
     builder.select(['*']).from('users').where('id', '=', 1).orWhereNotBetween('id', [new Raw(3), new Raw(4)]);
     expect('select * from "users" where "id" = ? or "id" not between 3 and 4').toBe(builder.toSql());
-    $this.assertEquals([1], builder.getBindings());
+    expect(builder.getBindings()).toBe([1]);
 })
 
 test('WhereBetweenColumns', () =>
@@ -902,17 +932,17 @@ test('WhereBetweenColumns', () =>
     let builder = getBuilder();
     builder.select(['*']).from('users').whereBetweenColumns('id', ['users.created_at', 'users.updated_at']);
     expect('select * from "users" where "id" between "users"."created_at" and "users"."updated_at"').toBe(builder.toSql());
-    $this.assertEquals([], builder.getBindings());
+    expect(builder.getBindings()).toBe([]);
 
     builder = getBuilder();
     builder.select(['*']).from('users').whereNotBetweenColumns('id', ['created_at', 'updated_at']);
     expect('select * from "users" where "id" not between "created_at" and "updated_at"').toBe(builder.toSql());
-    $this.assertEquals([], builder.getBindings());
+    expect(builder.getBindings()).toBe([]);
 
     builder = getBuilder();
     builder.select(['*']).from('users').whereBetweenColumns('id', [new Raw(1), new Raw(2)]);
     expect('select * from "users" where "id" between 1 and 2').toBe(builder.toSql());
-    $this.assertEquals([], builder.getBindings());
+    expect(builder.getBindings()).toBe([]);
 })
 
 test('OrWhereBetweenColumns', () =>
@@ -920,17 +950,17 @@ test('OrWhereBetweenColumns', () =>
     let builder = getBuilder();
     builder.select(['*']).from('users').where('id', 2).orWhereBetweenColumns('id', ['users.created_at', 'users.updated_at']);
     expect('select * from "users" where "id" = ? or "id" between "users"."created_at" and "users"."updated_at"').toBe(builder.toSql());
-    $this.assertEquals([2], builder.getBindings());
+    expect(builder.getBindings()).toBe([2]);
 
     builder = getBuilder();
     builder.select(['*']).from('users').where('id', 2).orWhereBetweenColumns('id', ['created_at', 'updated_at']);
     expect('select * from "users" where "id" = ? or "id" between "created_at" and "updated_at"').toBe(builder.toSql());
-    $this.assertEquals([2], builder.getBindings());
+    expect(builder.getBindings()).toBe([2]);
 
     builder = getBuilder();
     builder.select(['*']).from('users').where('id', 2).orWhereBetweenColumns('id', [new Raw(1), new Raw(2)]);
     expect('select * from "users" where "id" = ? or "id" between 1 and 2').toBe(builder.toSql());
-    $this.assertEquals([2], builder.getBindings());
+    expect(builder.getBindings()).toBe([2]);
 })
 
 test('OrWhereNotBetweenColumns', () =>
@@ -938,17 +968,17 @@ test('OrWhereNotBetweenColumns', () =>
     let builder = getBuilder();
     builder.select(['*']).from('users').where('id', 2).orWhereNotBetweenColumns('id', ['users.created_at', 'users.updated_at']);
     expect('select * from "users" where "id" = ? or "id" not between "users"."created_at" and "users"."updated_at"').toBe(builder.toSql());
-    $this.assertEquals([2], builder.getBindings());
+    expect(builder.getBindings()).toBe([2]);
 
     builder = getBuilder();
     builder.select(['*']).from('users').where('id', 2).orWhereNotBetweenColumns('id', ['created_at', 'updated_at']);
     expect('select * from "users" where "id" = ? or "id" not between "created_at" and "updated_at"').toBe(builder.toSql());
-    $this.assertEquals([2], builder.getBindings());
+    expect(builder.getBindings()).toBe([2]);
 
     builder = getBuilder();
     builder.select(['*']).from('users').where('id', 2).orWhereNotBetweenColumns('id', [new Raw(1), new Raw(2)]);
     expect('select * from "users" where "id" = ? or "id" not between 1 and 2').toBe(builder.toSql());
-    $this.assertEquals([2], builder.getBindings());
+    expect(builder.getBindings()).toBe([2]);
 })
 
 test('BasicOrWheres', () =>
@@ -956,7 +986,7 @@ test('BasicOrWheres', () =>
     const builder = getBuilder();
     builder.select(['*']).from('users').where('id', '=', 1).orWhere('email', '=', 'foo');
     expect('select * from "users" where "id" = ? or "email" = ?').toBe(builder.toSql());
-    $this.assertEquals([1, 'foo'], builder.getBindings());
+    expect(builder.getBindings()).toBe([1, 'foo']);
 })
 
 test('BasicOrWhereNot', () =>
@@ -964,7 +994,7 @@ test('BasicOrWhereNot', () =>
     const builder = getBuilder();
     builder.select(['*']).from('users').orWhereNot('name', 'foo').orWhereNot('name', '<>', 'bar');
     expect('select * from "users" where not "name" = ? or not "name" <> ?').toBe(builder.toSql());
-    $this.assertEquals(['foo', 'bar'], builder.getBindings());
+    expect(builder.getBindings()).toBe(['foo', 'bar']);
 })
 
 test('RawWheres', () =>
@@ -972,7 +1002,7 @@ test('RawWheres', () =>
     const builder = getBuilder();
     builder.select(['*']).from('users').whereRaw('id = ? or email = ?', [1, 'foo']);
     expect('select * from "users" where id = ? or email = ?').toBe(builder.toSql());
-    $this.assertEquals([1, 'foo'], builder.getBindings());
+    expect(builder.getBindings()).toBe([1, 'foo']);
 })
 
 test('RawOrWheres', () =>
@@ -980,14 +1010,14 @@ test('RawOrWheres', () =>
     const builder = getBuilder();
     builder.select(['*']).from('users').where('id', '=', 1).orWhereRaw('email = ?', ['foo']);
     expect('select * from "users" where "id" = ? or email = ?').toBe(builder.toSql());
-    $this.assertEquals([1, 'foo'], builder.getBindings());
+    expect(builder.getBindings()).toBe([1, 'foo']);
 })
 
 test('BasicWhereIns', () => {
     let builder = getBuilder();
     builder.select(['*']).from('users').whereIn('id', [1, 2, 3]);
     expect('select * from "users" where "id" in (?, ?, ?)').toBe(builder.toSql());
-    $this.assertEquals([1, 2, 3], builder.getBindings());
+    expect(builder.getBindings()).toBe([1, 2, 3]);
 
     // associative arrays as values:
     builder = getBuilder();
@@ -997,7 +1027,7 @@ test('BasicWhereIns', () => {
         0 : 3,
     });
     expect('select * from "users" where "id" in (?, ?, ?)').toBe(builder.toSql());
-    $this.assertEquals([45582, 2, 3], builder.getBindings());
+    expect(builder.getBindings()).toBe([45582, 2, 3]);
 
     // can accept some nested arrays as values.
     builder = getBuilder();
@@ -1007,12 +1037,12 @@ test('BasicWhereIns', () => {
         [3],
     ]);
     expect('select * from "users" where "id" in (?, ?, ?)').toBe(builder.toSql());
-    $this.assertEquals([45582, 2, 3], builder.getBindings());
+    expect(builder.getBindings()).toBe([45582, 2, 3]);
 
     builder = getBuilder();
     builder.select(['*']).from('users').where('id', '=', 1).orWhereIn('id', [1, 2, 3]);
     expect('select * from "users" where "id" = ? or "id" in (?, ?, ?)').toBe(builder.toSql());
-    $this.assertEquals([1, 1, 2, 3], builder.getBindings());
+    expect(builder.getBindings()).toBe([1, 1, 2, 3]);
 })
 
 test('BasicWhereInsException', () =>
@@ -1034,12 +1064,12 @@ test('BasicWhereNotIns', () =>
     let builder = getBuilder();
     builder.select(['*']).from('users').whereNotIn('id', [1, 2, 3]);
     expect('select * from "users" where "id" not in (?, ?, ?)').toBe(builder.toSql());
-    $this.assertEquals([1, 2, 3], builder.getBindings());
+    expect(builder.getBindings()).toBe([1, 2, 3]);
 
     builder = getBuilder();
     builder.select(['*']).from('users').where('id', '=', 1).orWhereNotIn('id', [1, 2, 3]);
     expect('select * from "users" where "id" = ? or "id" not in (?, ?, ?)').toBe(builder.toSql());
-    $this.assertEquals([1, 1, 2, 3], builder.getBindings());
+    expect(builder.getBindings()).toBe([1, 1, 2, 3]);
 })
 
 test('RawWhereIns', () =>
@@ -1051,7 +1081,7 @@ test('RawWhereIns', () =>
     builder = getBuilder();
     builder.select(['*']).from('users').where('id', '=', 1).orWhereIn('id', [new Raw(1)]);
     expect('select * from "users" where "id" = ? or "id" in (1)').toBe(builder.toSql());
-    $this.assertEquals([1], builder.getBindings());
+    expect(builder.getBindings()).toBe([1]);
 })
 
 test('EmptyWhereIns', () =>
@@ -1059,12 +1089,12 @@ test('EmptyWhereIns', () =>
     let builder = getBuilder();
     builder.select(['*']).from('users').whereIn('id', []);
     expect('select * from "users" where 0 = 1').toBe(builder.toSql());
-    $this.assertEquals([], builder.getBindings());
+    expect(builder.getBindings()).toBe([]);
 
     builder = getBuilder();
     builder.select(['*']).from('users').where('id', '=', 1).orWhereIn('id', []);
     expect('select * from "users" where "id" = ? or 0 = 1').toBe(builder.toSql());
-    $this.assertEquals([1], builder.getBindings());
+    expect(builder.getBindings()).toBe([1]);
 })
 
 test('EmptyWhereNotIns', () =>
@@ -1072,19 +1102,19 @@ test('EmptyWhereNotIns', () =>
     let builder = getBuilder();
     builder.select(['*']).from('users').whereNotIn('id', []);
     expect('select * from "users" where 1 = 1').toBe(builder.toSql());
-    $this.assertEquals([], builder.getBindings());
+    expect(builder.getBindings()).toBe([]);
 
     builder = getBuilder();
     builder.select(['*']).from('users').where('id', '=', 1).orWhereNotIn('id', []);
     expect('select * from "users" where "id" = ? or 1 = 1').toBe(builder.toSql());
-    $this.assertEquals([1], builder.getBindings());
+    expect(builder.getBindings()).toBe([1]);
 })
 
 test('WhereIntegerInRaw', () => {
     let builder = getBuilder();
     builder.select(['*']).from('users').whereIntegerInRaw('id', ['1a', 2]);
     expect('select * from "users" where "id" in (1, 2)').toBe(builder.toSql());
-    $this.assertEquals([], builder.getBindings());
+    expect(builder.getBindings()).toBe([]);
 
     builder = getBuilder();
     builder.select(['*']).from('users').whereIntegerInRaw('id', [
@@ -1093,7 +1123,7 @@ test('WhereIntegerInRaw', () => {
         {'any': '3'},
     ]);
     expect('select * from "users" where "id" in (1, 2, 3)').toBe(builder.toSql());
-    $this.assertEquals([], builder.getBindings());
+    expect(builder.getBindings()).toBe([]);
 })
 
 test('OrWhereIntegerInRaw', () =>
@@ -1101,7 +1131,7 @@ test('OrWhereIntegerInRaw', () =>
     const builder = getBuilder();
     builder.select(['*']).from('users').where('id', '=', 1).orWhereIntegerInRaw('id', ['1a', 2]);
     expect('select * from "users" where "id" = ? or "id" in (1, 2)').toBe(builder.toSql());
-    $this.assertEquals([1], builder.getBindings());
+    expect(builder.getBindings()).toBe([1]);
 })
 
 test('WhereIntegerNotInRaw', () =>
@@ -1109,7 +1139,7 @@ test('WhereIntegerNotInRaw', () =>
     const builder = getBuilder();
     builder.select(['*']).from('users').whereIntegerNotInRaw('id', ['1a', 2]);
     expect('select * from "users" where "id" not in (1, 2)').toBe(builder.toSql());
-    $this.assertEquals([], builder.getBindings());
+    expect(builder.getBindings()).toBe([]);
 })
 
 test('OrWhereIntegerNotInRaw', () =>
@@ -1117,7 +1147,7 @@ test('OrWhereIntegerNotInRaw', () =>
     const builder = getBuilder();
     builder.select(['*']).from('users').where('id', '=', 1).orWhereIntegerNotInRaw('id', ['1a', 2]);
     expect('select * from "users" where "id" = ? or "id" not in (1, 2)').toBe(builder.toSql());
-    $this.assertEquals([1], builder.getBindings());
+    expect(builder.getBindings()).toBe([1]);
 })
 
 test('EmptyWhereIntegerInRaw', () =>
@@ -1125,7 +1155,7 @@ test('EmptyWhereIntegerInRaw', () =>
     const builder = getBuilder();
     builder.select(['*']).from('users').whereIntegerInRaw('id', []);
     expect('select * from "users" where 0 = 1').toBe(builder.toSql());
-    $this.assertEquals([], builder.getBindings());
+    expect(builder.getBindings()).toBe([]);
 })
 
 test('EmptyWhereIntegerNotInRaw', () =>
@@ -1133,7 +1163,7 @@ test('EmptyWhereIntegerNotInRaw', () =>
     const builder = getBuilder();
     builder.select(['*']).from('users').whereIntegerNotInRaw('id', []);
     expect('select * from "users" where 1 = 1').toBe(builder.toSql());
-    $this.assertEquals([], builder.getBindings());
+    expect(builder.getBindings()).toBe([]);
 })
 
 test('BasicWhereColumn', () =>
@@ -1141,30 +1171,30 @@ test('BasicWhereColumn', () =>
     let builder = getBuilder();
     builder.select(['*']).from('users').whereColumn('first_name', 'last_name').orWhereColumn('first_name', 'middle_name');
     expect('select * from "users" where "first_name" = "last_name" or "first_name" = "middle_name"').toBe(builder.toSql());
-    $this.assertEquals([], builder.getBindings());
+    expect(builder.getBindings()).toBe([]);
 
     builder = getBuilder();
     builder.select(['*']).from('users').whereColumn('updated_at', '>', 'created_at');
     expect('select * from "users" where "updated_at" > "created_at"').toBe(builder.toSql());
-    $this.assertEquals([], builder.getBindings());
+    expect(builder.getBindings()).toBe([]);
 })
 
 test('ArrayWhereColumn', () =>
 {
-    $conditions = [
+    const conditions = [
         ['first_name', 'last_name'],
         ['updated_at', '>', 'created_at'],
     ];
 
     const builder = getBuilder();
-    builder.select(['*']).from('users').whereColumn($conditions);
+    builder.select(['*']).from('users').whereColumn(conditions);
     expect('select * from "users" where ("first_name" = "last_name" and "updated_at" > "created_at")').toBe(builder.toSql());
-    $this.assertEquals([], builder.getBindings());
+    expect(builder.getBindings()).toBe([]);
 })
 
 test('WhereFulltextMySql', () =>
 {
-    builder = $this.getMySqlBuilderWithProcessor();
+    let builder = $this.getMySqlBuilderWithProcessor();
     builder.select(['*']).from('users').whereFulltext('body', 'Hello World');
     expect('select * from `users` where match (`body`) against (? in natural language mode)').toBe(builder.toSql());
     $this.assertEquals(['Hello World'], builder.getBindings());
@@ -1230,51 +1260,51 @@ test('WhereFulltextPostgres', () =>
 
 test('Unions', () =>
 {
-    const builder = getBuilder();
+    let builder = getBuilder();
     builder.select(['*']).from('users').where('id', '=', 1);
     builder.union(getBuilder().select(['*']).from('users').where('id', '=', 2));
     expect('(select * from "users" where "id" = ?) union (select * from "users" where "id" = ?)').toBe(builder.toSql());
-    $this.assertEquals([1, 2], builder.getBindings());
+    expect(builder.getBindings()).toBe([1, 2]);
 
-    builder = $this.getMysqlBuilder();
+    builder = getMysqlBuilder();
     builder.select(['*']).from('users').where('id', '=', 1);
     builder.union($this.getMySqlBuilder().select(['*']).from('users').where('id', '=', 2));
     expect('(select * from `users` where `id` = ?) union (select * from `users` where `id` = ?)').toBe(builder.toSql());
-    $this.assertEquals([1, 2], builder.getBindings());
+    expect(builder.getBindings()).toBe([1, 2]);
 
-    builder = $this.getMysqlBuilder();
-    $expectedSql = '(select `a` from `t1` where `a` = ? and `b` = ?) union (select `a` from `t2` where `a` = ? and `b` = ?) order by `a` asc limit 10';
-    $union = $this.getMysqlBuilder().select('a').from('t2').where('a', 11).where('b', 2);
+    builder = getMysqlBuilder();
+    let $expectedSql = '(select `a` from `t1` where `a` = ? and `b` = ?) union (select `a` from `t2` where `a` = ? and `b` = ?) order by `a` asc limit 10';
+    const $union = $this.getMysqlBuilder().select('a').from('t2').where('a', 11).where('b', 2);
     builder.select('a').from('t1').where('a', 10).where('b', 1).union($union).orderBy('a').limit(10);
     $this.assertEquals($expectedSql).toBe(builder.toSql());
     $this.assertEquals([10, 1, 11, 2], builder.getBindings());
 
-    builder = $this.getPostgresBuilder();
+    builder = getPostgresBuilder();
     $expectedSql = '(select "name" from "users" where "id" = ?) union (select "name" from "users" where "id" = ?)';
     builder.select('name').from('users').where('id', '=', 1);
     builder.union($this.getPostgresBuilder().select('name').from('users').where('id', '=', 2));
     $this.assertEquals($expectedSql).toBe(builder.toSql());
-    $this.assertEquals([1, 2], builder.getBindings());
+    expect(builder.getBindings()).toBe([1, 2]);
 
-    builder = $this.getSQLiteBuilder();
+    builder = getSQLiteBuilder();
     $expectedSql = 'select * from (select "name" from "users" where "id" = ?) union select * from (select "name" from "users" where "id" = ?)';
     builder.select('name').from('users').where('id', '=', 1);
     builder.union($this.getSQLiteBuilder().select('name').from('users').where('id', '=', 2));
     $this.assertEquals($expectedSql).toBe(builder.toSql());
-    $this.assertEquals([1, 2], builder.getBindings());
+    expect(builder.getBindings()).toBe([1, 2]);
 
-    builder = $this.getSqlServerBuilder();
+    builder = getSqlServerBuilder();
     $expectedSql = 'select * from (select [name] from [users] where [id] = ?) as [temp_table] union select * from (select [name] from [users] where [id] = ?) as [temp_table]';
     builder.select('name').from('users').where('id', '=', 1);
     builder.union($this.getSqlServerBuilder().select('name').from('users').where('id', '=', 2));
     $this.assertEquals($expectedSql).toBe(builder.toSql());
-    $this.assertEquals([1, 2], builder.getBindings());
+    expect(builder.getBindings()).toBe([1, 2]);
 
     builder = getBuilder();
     $eloquentBuilder = new EloquentBuilder(getBuilder());
     builder.select(['*']).from('users').where('id', '=', 1).union($eloquentBuilder.select(['*']).from('users').where('id', '=', 2));
     expect('(select * from "users" where "id" = ?) union (select * from "users" where "id" = ?)').toBe(builder.toSql());
-    $this.assertEquals([1, 2], builder.getBindings());
+    expect(builder.getBindings()).toBe([1, 2]);
 })
 
 test('UnionAlls', () =>
@@ -1283,21 +1313,21 @@ test('UnionAlls', () =>
     builder.select(['*']).from('users').where('id', '=', 1);
     builder.unionAll(getBuilder().select(['*']).from('users').where('id', '=', 2));
     expect('(select * from "users" where "id" = ?) union all (select * from "users" where "id" = ?)').toBe(builder.toSql());
-    $this.assertEquals([1, 2], builder.getBindings());
+    expect(builder.getBindings()).toBe([1, 2]);
 
     $expectedSql = '(select * from "users" where "id" = ?) union all (select * from "users" where "id" = ?)';
-    builder = $this.getPostgresBuilder();
+    builder = getPostgresBuilder();
     builder.select(['*']).from('users').where('id', '=', 1);
     builder.unionAll(getBuilder().select(['*']).from('users').where('id', '=', 2));
     $this.assertEquals($expectedSql).toBe(builder.toSql());
-    $this.assertEquals([1, 2], builder.getBindings());
+    expect(builder.getBindings()).toBe([1, 2]);
 
     builder = getBuilder();
     $eloquentBuilder = new EloquentBuilder(getBuilder());
     builder.select(['*']).from('users').where('id', '=', 1);
     builder.unionAll($eloquentBuilder.select(['*']).from('users').where('id', '=', 2));
     expect('(select * from "users" where "id" = ?) union all (select * from "users" where "id" = ?)').toBe(builder.toSql());
-    $this.assertEquals([1, 2], builder.getBindings());
+    expect(builder.getBindings()).toBe([1, 2]);
 })
 
 test('MultipleUnions', () =>
@@ -1307,7 +1337,7 @@ test('MultipleUnions', () =>
     builder.union(getBuilder().select(['*']).from('users').where('id', '=', 2));
     builder.union(getBuilder().select(['*']).from('users').where('id', '=', 3));
     expect('(select * from "users" where "id" = ?) union (select * from "users" where "id" = ?) union (select * from "users" where "id" = ?)').toBe(builder.toSql());
-    $this.assertEquals([1, 2, 3], builder.getBindings());
+    expect(builder.getBindings()).toBe([1, 2, 3]);
 })
 
 test('MultipleUnionAlls', () =>
@@ -1317,7 +1347,7 @@ test('MultipleUnionAlls', () =>
     builder.unionAll(getBuilder().select(['*']).from('users').where('id', '=', 2));
     builder.unionAll(getBuilder().select(['*']).from('users').where('id', '=', 3));
     expect('(select * from "users" where "id" = ?) union all (select * from "users" where "id" = ?) union all (select * from "users" where "id" = ?)').toBe(builder.toSql());
-    $this.assertEquals([1, 2, 3], builder.getBindings());
+    expect(builder.getBindings()).toBe([1, 2, 3]);
 })
 
 test('UnionOrderBys', () =>
@@ -1327,7 +1357,7 @@ test('UnionOrderBys', () =>
     builder.union(getBuilder().select(['*']).from('users').where('id', '=', 2));
     builder.orderBy('id', 'desc');
     expect('(select * from "users" where "id" = ?) union (select * from "users" where "id" = ?) order by "id" desc').toBe(builder.toSql());
-    $this.assertEquals([1, 2], builder.getBindings());
+    expect(builder.getBindings()).toBe([1, 2]);
 })
 
 test('UnionLimitsAndOffsets', () =>
@@ -1339,14 +1369,14 @@ test('UnionLimitsAndOffsets', () =>
     expect('(select * from "users") union (select * from "dogs") limit 10 offset 5').toBe(builder.toSql());
 
     $expectedSql = '(select * from "users") union (select * from "dogs") limit 10 offset 5';
-    builder = $this.getPostgresBuilder();
+    builder = getPostgresBuilder();
     builder.select(['*']).from('users');
     builder.union(getBuilder().select(['*']).from('dogs'));
     builder.skip(5).take(10);
     $this.assertEquals($expectedSql).toBe(builder.toSql());
 
     $expectedSql = '(select * from "users" limit 11) union (select * from "dogs" limit 22) limit 10 offset 5';
-    builder = $this.getPostgresBuilder();
+    builder = getPostgresBuilder();
     builder.select(['*']).from('users').limit(11);
     builder.union(getBuilder().select(['*']).from('dogs').limit(22));
     builder.skip(5).take(10);
@@ -1362,22 +1392,22 @@ test('UnionWithJoin', () =>
             .where('breeds.is_native', '=', 1);
     }));
     expect('(select * from "users") union (select * from "dogs" inner join "breeds" on "dogs"."breed_id" = "breeds"."id" and "breeds"."is_native" = ?)').toBe(builder.toSql());
-    $this.assertEquals([1], builder.getBindings());
+    expect(builder.getBindings()).toBe([1]);
 })
 
 test('MySqlUnionOrderBys', () =>
 {
-    const builder = $this.getMysqlBuilder();
+    const builder = getMysqlBuilder();
     builder.select(['*']).from('users').where('id', '=', 1);
     builder.union($this.getMySqlBuilder().select(['*']).from('users').where('id', '=', 2));
     builder.orderBy('id', 'desc');
     expect('(select * from `users` where `id` = ?) union (select * from `users` where `id` = ?) order by `id` desc').toBe(builder.toSql());
-    $this.assertEquals([1, 2], builder.getBindings());
+    expect(builder.getBindings()).toBe([1, 2]);
 })
 
 test('MySqlUnionLimitsAndOffsets', () =>
 {
-    const builder = $this.getMysqlBuilder();
+    const builder = getMysqlBuilder();
     builder.select(['*']).from('users');
     builder.union($this.getMySqlBuilder().select(['*']).from('dogs'));
     builder.skip(5).take(10);
@@ -1387,31 +1417,31 @@ test('MySqlUnionLimitsAndOffsets', () =>
 test('UnionAggregate', () =>
 {
     $expected = 'select count(*) as aggregate from ((select * from `posts`) union (select * from `videos`)) as `temp_table`';
-    const builder = $this.getMysqlBuilder();
+    const builder = getMysqlBuilder();
     builder.getConnection().shouldReceive('select').once().with($expected, [], true);
     builder.getProcessor().shouldReceive('processSelect').once();
     builder.from('posts').union($this.getMySqlBuilder().from('videos')).count();
 
     $expected = 'select count(*) as aggregate from ((select `id` from `posts`) union (select `id` from `videos`)) as `temp_table`';
-    builder = $this.getMysqlBuilder();
+    builder = getMysqlBuilder();
     builder.getConnection().shouldReceive('select').once().with($expected, [], true);
     builder.getProcessor().shouldReceive('processSelect').once();
     builder.from('posts').select('id').union($this.getMySqlBuilder().from('videos').select('id')).count();
 
     $expected = 'select count(*) as aggregate from ((select * from "posts") union (select * from "videos")) as "temp_table"';
-    builder = $this.getPostgresBuilder();
+    builder = getPostgresBuilder();
     builder.getConnection().shouldReceive('select').once().with($expected, [], true);
     builder.getProcessor().shouldReceive('processSelect').once();
     builder.from('posts').union($this.getPostgresBuilder().from('videos')).count();
 
     $expected = 'select count(*) as aggregate from (select * from (select * from "posts") union select * from (select * from "videos")) as "temp_table"';
-    builder = $this.getSQLiteBuilder();
+    builder = getSQLiteBuilder();
     builder.getConnection().shouldReceive('select').once().with($expected, [], true);
     builder.getProcessor().shouldReceive('processSelect').once();
     builder.from('posts').union($this.getSQLiteBuilder().from('videos')).count();
 
     $expected = 'select count(*) as aggregate from (select * from (select * from [posts]) as [temp_table] union select * from (select * from [videos]) as [temp_table]) as [temp_table]';
-    builder = $this.getSqlServerBuilder();
+    builder = getSqlServerBuilder();
     builder.getConnection().shouldReceive('select').once().with($expected, [], true);
     builder.getProcessor().shouldReceive('processSelect').once();
     builder.from('posts').union($this.getSqlServerBuilder().from('videos')).count();
@@ -1420,7 +1450,7 @@ test('UnionAggregate', () =>
 test('HavingAggregate', () =>
 {
     $expected = 'select count(*) as aggregate from (select (select `count(*)` from `videos` where `posts`.`id` = `videos`.`post_id`) as `videos_count` from `posts` having `videos_count` > ?) as `temp_table`';
-    const builder = $this.getMysqlBuilder();
+    const builder = getMysqlBuilder();
     builder.getConnection().shouldReceive('getDatabaseName');
     builder.getConnection().shouldReceive('select').once().with($expected, [1], true).andReturn([{'aggregate': 1}]);
     builder.getProcessor().shouldReceive('processSelect').once().andReturnUsing(function (builder, $results) {
@@ -1455,51 +1485,51 @@ test('BasicWhereNulls', () =>
     let builder = getBuilder();
     builder.select(['*']).from('users').whereNull('id');
     expect('select * from "users" where "id" is null').toBe(builder.toSql());
-    $this.assertEquals([], builder.getBindings());
+    expect(builder.getBindings()).toBe([]);
 
     builder = getBuilder();
     builder.select(['*']).from('users').where('id', '=', 1).orWhereNull('id');
     expect('select * from "users" where "id" = ? or "id" is null').toBe(builder.toSql());
-    $this.assertEquals([1], builder.getBindings());
+    expect(builder.getBindings()).toBe([1]);
 })
 
 test('BasicWhereNullExpressionsMysql', () =>
 {
-    const builder = $this.getMysqlBuilder();
+    const builder = getMysqlBuilder();
     builder.select(['*']).from('users').whereNull(new Raw('id'));
     expect('select * from `users` where id is null').toBe(builder.toSql());
-    $this.assertEquals([], builder.getBindings());
+    expect(builder.getBindings()).toBe([]);
 
-    builder = $this.getMysqlBuilder();
+    builder = getMysqlBuilder();
     builder.select(['*']).from('users').where('id', '=', 1).orWhereNull(new Raw('id'));
     expect('select * from `users` where `id` = ? or id is null').toBe(builder.toSql());
-    $this.assertEquals([1], builder.getBindings());
+    expect(builder.getBindings()).toBe([1]);
 })
 
 test('JsonWhereNullMysql', () =>
 {
-    const builder = $this.getMysqlBuilder();
+    const builder = getMysqlBuilder();
     builder.select(['*']).from('users').whereNull('items.id');
     expect('select * from `users` where (json_extract(`items`, \'$."id"\') is null OR json_type(json_extract(`items`, \'$."id"\')) = \'NULL\')').toBe(builder.toSql());
 })
 
 test('JsonWhereNotNullMysql', () =>
 {
-    const builder = $this.getMysqlBuilder();
+    const builder = getMysqlBuilder();
     builder.select(['*']).from('users').whereNotNull('items.id');
     expect('select * from `users` where (json_extract(`items`, \'$."id"\') is not null AND json_type(json_extract(`items`, \'$."id"\')) != \'NULL\')').toBe(builder.toSql());
 })
 
 test('JsonWhereNullExpressionMysql', () =>
 {
-    const builder = $this.getMysqlBuilder();
+    const builder = getMysqlBuilder();
     builder.select(['*']).from('users').whereNull(new Raw('items.id'));
     expect('select * from `users` where (json_extract(`items`, \'$."id"\') is null OR json_type(json_extract(`items`, \'$."id"\')) = \'NULL\')').toBe(builder.toSql());
 })
 
 test('JsonWhereNotNullExpressionMysql', () =>
 {
-    const builder = $this.getMysqlBuilder();
+    const builder = getMysqlBuilder();
     builder.select(['*']).from('users').whereNotNull(new Raw('items.id'));
     expect('select * from `users` where (json_extract(`items`, \'$."id"\') is not null AND json_type(json_extract(`items`, \'$."id"\')) != \'NULL\')').toBe(builder.toSql());
 })
@@ -1509,12 +1539,12 @@ test('ArrayWhereNulls', () =>
     const builder = getBuilder();
     builder.select(['*']).from('users').whereNull(['id', 'expires_at']);
     expect('select * from "users" where "id" is null and "expires_at" is null').toBe(builder.toSql());
-    $this.assertEquals([], builder.getBindings());
+    expect(builder.getBindings()).toBe([]);
 
     builder = getBuilder();
     builder.select(['*']).from('users').where('id', '=', 1).orWhereNull(['id', 'expires_at']);
     expect('select * from "users" where "id" = ? or "id" is null or "expires_at" is null').toBe(builder.toSql());
-    $this.assertEquals([1], builder.getBindings());
+    expect(builder.getBindings()).toBe([1]);
 })
 
 test('BasicWhereNotNulls', () =>
@@ -1522,12 +1552,12 @@ test('BasicWhereNotNulls', () =>
     const builder = getBuilder();
     builder.select(['*']).from('users').whereNotNull('id');
     expect('select * from "users" where "id" is not null').toBe(builder.toSql());
-    $this.assertEquals([], builder.getBindings());
+    expect(builder.getBindings()).toBe([]);
 
     builder = getBuilder();
     builder.select(['*']).from('users').where('id', '>', 1).orWhereNotNull('id');
     expect('select * from "users" where "id" > ? or "id" is not null').toBe(builder.toSql());
-    $this.assertEquals([1], builder.getBindings());
+    expect(builder.getBindings()).toBe([1]);
 })
 
 test('ArrayWhereNotNulls', () =>
@@ -1535,12 +1565,12 @@ test('ArrayWhereNotNulls', () =>
     const builder = getBuilder();
     builder.select(['*']).from('users').whereNotNull(['id', 'expires_at']);
     expect('select * from "users" where "id" is not null and "expires_at" is not null').toBe(builder.toSql());
-    $this.assertEquals([], builder.getBindings());
+    expect(builder.getBindings()).toBe([]);
 
     builder = getBuilder();
     builder.select(['*']).from('users').where('id', '>', 1).orWhereNotNull(['id', 'expires_at']);
     expect('select * from "users" where "id" > ? or "id" is not null or "expires_at" is not null').toBe(builder.toSql());
-    $this.assertEquals([1], builder.getBindings());
+    expect(builder.getBindings()).toBe([1]);
 })
 
 test('GroupBys', () =>
@@ -1639,21 +1669,21 @@ test('InRandomOrderMySql', () =>
 
 test('InRandomOrderPostgres', () =>
 {
-    const builder = $this.getPostgresBuilder();
+    const builder = getPostgresBuilder();
     builder.select(['*']).from('users').inRandomOrder();
     expect('select * from "users" order by RANDOM()').toBe(builder.toSql());
 })
 
 test('InRandomOrderSqlServer', () =>
 {
-    const builder = $this.getSqlServerBuilder();
+    const builder = getSqlServerBuilder();
     builder.select(['*']).from('users').inRandomOrder();
     expect('select * from [users] order by NEWID()').toBe(builder.toSql());
 })
 
 test('OrderBysSqlServer', () =>
 {
-    const builder = $this.getSqlServerBuilder();
+    const builder = getSqlServerBuilder();
     builder.select(['*']).from('users').orderBy('email').orderBy('age', 'desc');
     expect('select * from [users] order by [email] asc, [age] desc').toBe(builder.toSql());
 
@@ -1663,24 +1693,24 @@ test('OrderBysSqlServer', () =>
     builder.orders = [];
     expect('select * from [users]').toBe(builder.toSql());
 
-    builder = $this.getSqlServerBuilder();
+    builder = getSqlServerBuilder();
     builder.select(['*']).from('users').orderBy('email');
     expect('select * from [users] order by [email] asc').toBe(builder.toSql());
 
-    builder = $this.getSqlServerBuilder();
+    builder = getSqlServerBuilder();
     builder.select(['*']).from('users').orderByDesc('name');
     expect('select * from [users] order by [name] desc').toBe(builder.toSql());
 
-    builder = $this.getSqlServerBuilder();
+    builder = getSqlServerBuilder();
     builder.select(['*']).from('users').orderByRaw('[age] asc');
     expect('select * from [users] order by [age] asc').toBe(builder.toSql());
 
-    builder = $this.getSqlServerBuilder();
+    builder = getSqlServerBuilder();
     builder.select(['*']).from('users').orderBy('email').orderByRaw('[age] ? desc', ['foo']);
     expect('select * from [users] order by [email] asc, [age] ? desc').toBe(builder.toSql());
     $this.assertEquals(['foo'], builder.getBindings());
 
-    builder = $this.getSqlServerBuilder();
+    builder = getSqlServerBuilder();
     builder.select(['*']).from('users').skip(25).take(10).orderByRaw('[email] desc');
     expect('select * from [users] order by [email] desc offset 25 rows fetch next 10 rows only').toBe(builder.toSql());
 })
@@ -1711,7 +1741,7 @@ test('Reorder', () =>
     builder.select(['*']).from('users').orderByRaw('?', [true]);
     $this.assertEquals([true], builder.getBindings());
     builder.reorder();
-    $this.assertEquals([], builder.getBindings());
+    expect(builder.getBindings()).toBe([]);
 })
 
 test('OrderBySubQueries', () =>
@@ -1791,25 +1821,25 @@ test('NestedHavingBindings', () =>
     builder.having('email', '=', 'foo').having(function ($q) {
         $q.selectRaw('?', ['ignore']).having('name', '=', 'bar');
     });
-    $this.assertEquals(['foo', 'bar'], builder.getBindings());
+    expect(builder.getBindings()).toBe(['foo', 'bar']);
 })
 
 test('HavingBetweens', () =>
 {
-    const builder = getBuilder();
+    let builder = getBuilder();
     builder.select(['*']).from('users').havingBetween('id', [1, 2, 3]);
     expect('select * from "users" having "id" between ? and ?').toBe(builder.toSql());
-    $this.assertEquals([1, 2], builder.getBindings());
+    expect(builder.getBindings()).toBe([1, 2]);
 
     builder = getBuilder();
     builder.select(['*']).from('users').havingBetween('id', [[1, 2], [3, 4]]);
     expect('select * from "users" having "id" between ? and ?').toBe(builder.toSql());
-    $this.assertEquals([1, 2], builder.getBindings());
+    expect(builder.getBindings()).toBe([1, 2]);
 })
 
 test('HavingNull', () =>
 {
-    const builder = getBuilder();
+    let builder = getBuilder();
     builder.select(['*']).from('users').havingNull('email');
     expect('select * from "users" having "email" is null').toBe(builder.toSql());
 
@@ -1844,7 +1874,7 @@ test('HavingNull', () =>
 
 test('HavingNotNull', () =>
 {
-    const builder = getBuilder();
+    let builder = getBuilder();
     builder.select(['*']).from('users').havingNotNull('email');
     expect('select * from "users" having "email" is not null').toBe(builder.toSql());
 
@@ -1903,13 +1933,13 @@ test('HavingShortcut', () =>
 test('HavingFollowedBySelectGet', () =>
 {
     const builder = getBuilder();
-    $query = 'select "category", count(*) as "total" from "item" where "department" = ? group by "category" having "total" > ?';
+    let $query = 'select "category", count(*) as "total" from "item" where "department" = ? group by "category" having "total" > ?';
     builder.getConnection().shouldReceive('select').once().with($query, ['popular', 3], true).andReturn([{'category': 'rock', 'total': 5}]);
     builder.getProcessor().shouldReceive('processSelect').andReturnUsing(function (builder, $results) {
         return $results;
     });
     builder.from('item');
-    $result = builder.select(['category', new Raw('count(*) as "total"')]).where('department', '=', 'popular').groupBy('category').having('total', '>', 3).get();
+    let $result = builder.select(['category', new Raw('count(*) as "total"')]).where('department', '=', 'popular').groupBy('category').having('total', '>', 3).get();
     $this.assertEquals([{'category': 'rock', 'total': 5}], $result.all());
 
     // Using \Raw value
@@ -1941,7 +1971,7 @@ test('RawHavings', () =>
 
 test('LimitsAndOffsets', () =>
 {
-    const builder = getBuilder();
+    let builder = getBuilder();
     builder.select(['*']).from('users').offset(5).limit(10);
     expect('select * from "users" limit 10 offset 5').toBe(builder.toSql());
 
@@ -1976,7 +2006,7 @@ test('LimitsAndOffsets', () =>
 
 test('ForPage', () =>
 {
-    const builder = getBuilder();
+    let builder = getBuilder();
     builder.select(['*']).from('users').forPage(2, 15);
     expect('select * from "users" limit 15 offset 15').toBe(builder.toSql());
 
@@ -2021,7 +2051,7 @@ test('GetCountForPaginationWithBindings', () =>
 test('GetCountForPaginationWithColumnAliases', () =>
 {
     const builder = getBuilder();
-    $columns = ['body as post_body', 'teaser', 'posts.created as published'];
+    const $columns = ['body as post_body', 'teaser', 'posts.created as published'];
     builder.from('posts').select($columns);
 
     builder.getConnection().shouldReceive('select').once().with('select count("body", "teaser", "posts"."created") as aggregate from "posts"', [], true).andReturn([{'aggregate': 1}]);
@@ -2029,7 +2059,7 @@ test('GetCountForPaginationWithColumnAliases', () =>
         return $results;
     });
 
-    $count = builder.getCountForPagination($columns);
+    const $count = builder.getCountForPagination($columns);
     $this.assertEquals(1, $count);
 })
 
@@ -2043,7 +2073,7 @@ test('GetCountForPaginationWithUnion', () =>
         return $results;
     });
 
-    $count = builder.getCountForPagination();
+    const $count = builder.getCountForPagination();
     $this.assertEquals(1, $count);
 })
 
@@ -2052,25 +2082,25 @@ test('WhereShortcut', () =>
     const builder = getBuilder();
     builder.select(['*']).from('users').where('id', 1).orWhere('name', 'foo');
     expect('select * from "users" where "id" = ? or "name" = ?').toBe(builder.toSql());
-    $this.assertEquals([1, 'foo'], builder.getBindings());
+    expect(builder.getBindings()).toBe([1, 'foo']);
 })
 
 test('WhereWithArrayConditions', () =>
 {
-    const builder = getBuilder();
+    let builder = getBuilder();
     builder.select(['*']).from('users').where([['foo', 1], ['bar', 2]]);
     expect('select * from "users" where ("foo" = ? and "bar" = ?)').toBe(builder.toSql());
-    $this.assertEquals([1, 2], builder.getBindings());
+    expect(builder.getBindings()).toBe([1, 2]);
 
     builder = getBuilder();
     builder.select(['*']).from('users').where({'foo': 1, 'bar': 2});
     expect('select * from "users" where ("foo" = ? and "bar" = ?)').toBe(builder.toSql());
-    $this.assertEquals([1, 2], builder.getBindings());
+    expect(builder.getBindings()).toBe([1, 2]);
 
     builder = getBuilder();
     builder.select(['*']).from('users').where([['foo', 1], ['bar', '<', 2]]);
     expect('select * from "users" where ("foo" = ? and "bar" < ?)').toBe(builder.toSql());
-    $this.assertEquals([1, 2], builder.getBindings());
+    expect(builder.getBindings()).toBe([1, 2]);
 })
 
 test('NestedWheres', () =>
@@ -2089,7 +2119,7 @@ test('NestedWhereBindings', () =>
     builder.where('email', '=', 'foo').where(function ($q) {
         $q.selectRaw('?', ['ignore']).where('name', '=', 'bar');
     });
-    $this.assertEquals(['foo', 'bar'], builder.getBindings());
+    expect(builder.getBindings()).toBe(['foo', 'bar']);
 })
 
 test('WhereNot', () =>
@@ -2137,17 +2167,17 @@ test('WhereNotWithArrayConditions', () =>
     let builder = getBuilder();
     builder.select(['*']).from('users').whereNot([['foo', 1], ['bar', 2]]);
     expect('select * from "users" where not (("foo" = ? and "bar" = ?))').toBe(builder.toSql());
-    $this.assertEquals([1, 2], builder.getBindings());
+    expect(builder.getBindings()).toBe([1, 2]);
 
     builder = getBuilder();
     builder.select(['*']).from('users').whereNot({'foo': 1, 'bar': 2});
     expect('select * from "users" where not (("foo" = ? and "bar" = ?))').toBe(builder.toSql());
-    $this.assertEquals([1, 2], builder.getBindings());
+    expect(builder.getBindings()).toBe([1, 2]);
 
     builder = getBuilder();
     builder.select(['*']).from('users').whereNot([['foo', 1], ['bar', '<', 2]]);
     expect('select * from "users" where not (("foo" = ? and "bar" < ?))').toBe(builder.toSql());
-    $this.assertEquals([1, 2], builder.getBindings());
+    expect(builder.getBindings()).toBe([1, 2]);
 })
 
 test('FullSubSelects', () =>
@@ -2158,7 +2188,7 @@ test('FullSubSelects', () =>
     });
 
     expect('select * from "users" where "email" = ? or "id" = (select max(id) from "users" where "email" = ?)').toBe(builder.toSql());
-    $this.assertEquals(['foo', 'bar'], builder.getBindings());
+    expect(builder.getBindings()).toBe(['foo', 'bar']);
 })
 
 test('WhereExists', () =>
@@ -2269,11 +2299,11 @@ test('ComplexJoin', () =>
         $j.where('users.id', '=', 'foo').orWhere('users.name', '=', 'bar');
     });
     expect('select * from "users" inner join "contacts" on "users"."id" = ? or "users"."name" = ?').toBe(builder.toSql());
-    $this.assertEquals(['foo', 'bar'], builder.getBindings());
+    expect(builder.getBindings()).toBe(['foo', 'bar']);
 
     // Run the assertions again
     expect('select * from "users" inner join "contacts" on "users"."id" = ? or "users"."name" = ?').toBe(builder.toSql());
-    $this.assertEquals(['foo', 'bar'], builder.getBindings());
+    expect(builder.getBindings()).toBe(['foo', 'bar']);
 })
 
 test('JoinWhereNull', () =>
@@ -2411,7 +2441,7 @@ test('JoinsWithSubqueryCondition', () =>
         });
     });
     expect('select * from "users" left join "contacts" on "users"."id" = "contacts"."id" and "contact_type_id" in (select "id" from "contact_types" where "category_id" = ? and "deleted_at" is null)').toBe(builder.toSql());
-    $this.assertEquals(['1'], builder.getBindings());
+    expect(builder.getBindings()).toBe([1]);
 
     builder = getBuilder();
     builder.select(['*']).from('users').leftJoin('contacts', function ($j) {
@@ -2423,7 +2453,7 @@ test('JoinsWithSubqueryCondition', () =>
         });
     });
     expect('select * from "users" left join "contacts" on "users"."id" = "contacts"."id" and exists (select 1 from "contact_types" where contact_types.id = contacts.contact_type_id and "category_id" = ? and "deleted_at" is null)').toBe(builder.toSql());
-    $this.assertEquals(['1'], builder.getBindings());
+    expect(builder.getBindings()).toBe([1]);
 })
 
 test('JoinsWithAdvancedSubqueryCondition', () =>
@@ -2502,7 +2532,7 @@ test('JoinWithNestedOnCondition', () =>
             .addNestedWhereQuery(getBuilder().where('contacts.id', 1));
     });
     expect('select "users"."id" from "users" inner join "contacts" on "users"."id" = "contacts"."id" and ("contacts"."id" = ?)').toBe(builder.toSql());
-    $this.assertEquals([1], builder.getBindings());
+    expect(builder.getBindings()).toBe([1]);
 })
 
 test('JoinSub', () =>
@@ -2732,7 +2762,7 @@ test('AggregateFunctions', () =>
 
 test('SqlServerExists', () =>
 {
-    const builder = $this.getSqlServerBuilder();
+    const builder = getSqlServerBuilder();
     builder.getConnection().shouldReceive('select').once().with('select top 1 1 [exists] from [users]', [], true).andReturn([{'exists': 1}]);
     $results = builder.from('users').exists();
     $this.assertTrue($results);
@@ -2906,7 +2936,7 @@ test('InsertOrIgnoreMethod', () =>
 
 test('MySqlInsertOrIgnoreMethod', () =>
 {
-    const builder = $this.getMysqlBuilder();
+    const builder = getMysqlBuilder();
     builder.getConnection().shouldReceive('affectingStatement').once().with('insert ignore into `users` (`email`) values (?)', ['foo']).andReturn(1);
     $result = builder.from('users').insertOrIgnore({'email': 'foo'});
     $this.assertEquals(1, $result);
@@ -2914,7 +2944,7 @@ test('MySqlInsertOrIgnoreMethod', () =>
 
 test('PostgresInsertOrIgnoreMethod', () =>
 {
-    const builder = $this.getPostgresBuilder();
+    const builder = getPostgresBuilder();
     builder.getConnection().shouldReceive('affectingStatement').once().with('insert into "users" ("email") values (?) on conflict do nothing', ['foo']).andReturn(1);
     $result = builder.from('users').insertOrIgnore({'email': 'foo'});
     $this.assertEquals(1, $result);
@@ -2922,7 +2952,7 @@ test('PostgresInsertOrIgnoreMethod', () =>
 
 test('SQLiteInsertOrIgnoreMethod', () =>
 {
-    builder = $this.getSQLiteBuilder();
+    builder = getSQLiteBuilder();
     builder.getConnection().shouldReceive('affectingStatement').once().with('insert or ignore into "users" ("email") values (?)', ['foo']).andReturn(1);
     $result = builder.from('users').insertOrIgnore({'email': 'foo'});
     $this.assertEquals(1, $result);
@@ -2932,7 +2962,7 @@ test('SqlServerInsertOrIgnoreMethod', () =>
 {
     //$this.expectException(RuntimeException::class);
     //$this.expectExceptionMessage('does not support');
-    const builder = $this.getSqlServerBuilder();
+    const builder = getSqlServerBuilder();
     builder.from('users').insertOrIgnore({'email': 'foo'});
 })
 
@@ -2954,19 +2984,19 @@ test('InsertGetIdMethodRemovesExpressions', () =>
 
 test('InsertGetIdWithEmptyValues', () =>
 {
-    const builder = $this.getMysqlBuilder();
+    const builder = getMysqlBuilder();
     builder.getProcessor().shouldReceive('processInsertGetId').once().with(builder, 'insert into `users` () values ()', [], null);
     builder.from('users').insertGetId([]);
 
-    builder = $this.getPostgresBuilder();
+    builder = getPostgresBuilder();
     builder.getProcessor().shouldReceive('processInsertGetId').once().with(builder, 'insert into "users" default values returning "id"', [], null);
     builder.from('users').insertGetId([]);
 
-    builder = $this.getSQLiteBuilder();
+    builder = getSQLiteBuilder();
     builder.getProcessor().shouldReceive('processInsertGetId').once().with(builder, 'insert into "users" default values', [], null);
     builder.from('users').insertGetId([]);
 
-    builder = $this.getSqlServerBuilder();
+    builder = getSqlServerBuilder();
     builder.getProcessor().shouldReceive('processInsertGetId').once().with(builder, 'insert into [users] default values', [], null);
     builder.from('users').insertGetId([]);
 })
@@ -2994,7 +3024,7 @@ test('UpdateMethod', () =>
     $result = builder.from('users').where('id', '=', 1).update({'email': 'foo', 'name': 'bar'});
     $this.assertEquals(1, $result);
 
-    builder = $this.getMysqlBuilder();
+    builder = getMysqlBuilder();
     builder.getConnection().shouldReceive('update').once().with('update `users` set `email` = ?, `name` = ? where `id` = ? order by `foo` desc limit 5', ['foo', 'bar', 1]).andReturn(1);
     $result = builder.from('users').where('id', '=', 1).orderBy('foo', 'desc').limit(5).update({'email': 'foo', 'name': 'bar'});
     $this.assertEquals(1, $result);
@@ -3002,31 +3032,31 @@ test('UpdateMethod', () =>
 
 test('UpsertMethod', () =>
 {
-    const builder = $this.getMysqlBuilder();
+    const builder = getMysqlBuilder();
     builder.getConnection()
         .shouldReceive('getConfig').with('use_upsert_alias').andReturn(false)
         .shouldReceive('affectingStatement').once().with('insert into `users` (`email`, `name`) values (?, ?), (?, ?) on duplicate key update `email` = values(`email`), `name` = values(`name`)', ['foo', 'bar', 'foo2', 'bar2']).andReturn(2);
     $result = builder.from('users').upsert([{'email': 'foo', 'name': 'bar'}, {'name': 'bar2', 'email': 'foo2'}], 'email');
     $this.assertEquals(2, $result);
 
-    builder = $this.getMysqlBuilder();
+    builder = getMysqlBuilder();
     builder.getConnection()
         .shouldReceive('getConfig').with('use_upsert_alias').andReturn(true)
         .shouldReceive('affectingStatement').once().with('insert into `users` (`email`, `name`) values (?, ?), (?, ?) as laravel_upsert_alias on duplicate key update `email` = `laravel_upsert_alias`.`email`, `name` = `laravel_upsert_alias`.`name`', ['foo', 'bar', 'foo2', 'bar2']).andReturn(2);
     $result = builder.from('users').upsert([{'email': 'foo', 'name': 'bar'}, {'name': 'bar2', 'email': 'foo2'}], 'email');
     $this.assertEquals(2, $result);
 
-    builder = $this.getPostgresBuilder();
+    builder = getPostgresBuilder();
     builder.getConnection().shouldReceive('affectingStatement').once().with('insert into "users" ("email", "name") values (?, ?), (?, ?) on conflict ("email") do update set "email" = "excluded"."email", "name" = "excluded"."name"', ['foo', 'bar', 'foo2', 'bar2']).andReturn(2);
     $result = builder.from('users').upsert([{'email': 'foo', 'name': 'bar'}, {'name': 'bar2', 'email': 'foo2'}], 'email');
     $this.assertEquals(2, $result);
 
-    builder = $this.getSQLiteBuilder();
+    builder = getSQLiteBuilder();
     builder.getConnection().shouldReceive('affectingStatement').once().with('insert into "users" ("email", "name") values (?, ?), (?, ?) on conflict ("email") do update set "email" = "excluded"."email", "name" = "excluded"."name"', ['foo', 'bar', 'foo2', 'bar2']).andReturn(2);
     $result = builder.from('users').upsert([{'email': 'foo', 'name': 'bar'}, {'name': 'bar2', 'email': 'foo2'}], 'email');
     $this.assertEquals(2, $result);
 
-    builder = $this.getSqlServerBuilder();
+    builder = getSqlServerBuilder();
     builder.getConnection().shouldReceive('affectingStatement').once().with('merge [users] using (values (?, ?), (?, ?)) [laravel_source] ([email], [name]) on [laravel_source].[email] = [users].[email] when matched then update set [email] = [laravel_source].[email], [name] = [laravel_source].[name] when not matched then insert ([email], [name]) values ([email], [name]);', ['foo', 'bar', 'foo2', 'bar2']).andReturn(2);
     $result = builder.from('users').upsert([{'email': 'foo', 'name': 'bar'}, {'name': 'bar2', 'email': 'foo2'}], 'email');
     $this.assertEquals(2, $result);
@@ -3034,31 +3064,31 @@ test('UpsertMethod', () =>
 
 test('UpsertMethodWithUpdateColumns', () =>
 {
-    const builder = $this.getMysqlBuilder();
+    const builder = getMysqlBuilder();
     builder.getConnection()
         .shouldReceive('getConfig').with('use_upsert_alias').andReturn(false)
         .shouldReceive('affectingStatement').once().with('insert into `users` (`email`, `name`) values (?, ?), (?, ?) on duplicate key update `name` = values(`name`)', ['foo', 'bar', 'foo2', 'bar2']).andReturn(2);
     $result = builder.from('users').upsert([{'email': 'foo', 'name': 'bar'}, {'name': 'bar2', 'email': 'foo2'}], 'email', ['name']);
     $this.assertEquals(2, $result);
 
-    builder = $this.getMysqlBuilder();
+    builder = getMysqlBuilder();
     builder.getConnection()
         .shouldReceive('getConfig').with('use_upsert_alias').andReturn(true)
         .shouldReceive('affectingStatement').once().with('insert into `users` (`email`, `name`) values (?, ?), (?, ?) as laravel_upsert_alias on duplicate key update `name` = `laravel_upsert_alias`.`name`', ['foo', 'bar', 'foo2', 'bar2']).andReturn(2);
     $result = builder.from('users').upsert([{'email': 'foo', 'name': 'bar'}, {'name': 'bar2', 'email': 'foo2'}], 'email', ['name']);
     $this.assertEquals(2, $result);
 
-    builder = $this.getPostgresBuilder();
+    builder = getPostgresBuilder();
     builder.getConnection().shouldReceive('affectingStatement').once().with('insert into "users" ("email", "name") values (?, ?), (?, ?) on conflict ("email") do update set "name" = "excluded"."name"', ['foo', 'bar', 'foo2', 'bar2']).andReturn(2);
     $result = builder.from('users').upsert([{'email': 'foo', 'name': 'bar'}, {'name': 'bar2', 'email': 'foo2'}], 'email', ['name']);
     $this.assertEquals(2, $result);
 
-    builder = $this.getSQLiteBuilder();
+    builder = getSQLiteBuilder();
     builder.getConnection().shouldReceive('affectingStatement').once().with('insert into "users" ("email", "name") values (?, ?), (?, ?) on conflict ("email") do update set "name" = "excluded"."name"', ['foo', 'bar', 'foo2', 'bar2']).andReturn(2);
     $result = builder.from('users').upsert([{'email': 'foo', 'name': 'bar'}, {'name': 'bar2', 'email': 'foo2'}], 'email', ['name']);
     $this.assertEquals(2, $result);
 
-    builder = $this.getSqlServerBuilder();
+    builder = getSqlServerBuilder();
     builder.getConnection().shouldReceive('affectingStatement').once().with('merge [users] using (values (?, ?), (?, ?)) [laravel_source] ([email], [name]) on [laravel_source].[email] = [users].[email] when matched then update set [name] = [laravel_source].[name] when not matched then insert ([email], [name]) values ([email], [name]);', ['foo', 'bar', 'foo2', 'bar2']).andReturn(2);
     $result = builder.from('users').upsert([{'email': 'foo', 'name': 'bar'}, {'name': 'bar2', 'email': 'foo2'}], 'email', ['name']);
     $this.assertEquals(2, $result);
@@ -3082,12 +3112,12 @@ test('UpdateMethodWithJoins', () =>
 
 test('UpdateMethodWithJoinsOnSqlServer', () =>
 {
-    const builder = $this.getSqlServerBuilder();
+    const builder = getSqlServerBuilder();
     builder.getConnection().shouldReceive('update').once().with('update [users] set [email] = ?, [name] = ? from [users] inner join [orders] on [users].[id] = [orders].[user_id] where [users].[id] = ?', ['foo', 'bar', 1]).andReturn(1);
     $result = builder.from('users').join('orders', 'users.id', '=', 'orders.user_id').where('users.id', '=', 1).update({'email': 'foo', 'name': 'bar'});
     $this.assertEquals(1, $result);
 
-    builder = $this.getSqlServerBuilder();
+    builder = getSqlServerBuilder();
     builder.getConnection().shouldReceive('update').once().with('update [users] set [email] = ?, [name] = ? from [users] inner join [orders] on [users].[id] = [orders].[user_id] and [users].[id] = ?', ['foo', 'bar', 1]).andReturn(1);
     $result = builder.from('users').join('orders', function ($join) {
         $join.on('users.id', '=', 'orders.user_id')
@@ -3098,12 +3128,12 @@ test('UpdateMethodWithJoinsOnSqlServer', () =>
 
 test('UpdateMethodWithJoinsOnMySql', () =>
 {
-    const builder = $this.getMysqlBuilder();
+    const builder = getMysqlBuilder();
     builder.getConnection().shouldReceive('update').once().with('update `users` inner join `orders` on `users`.`id` = `orders`.`user_id` set `email` = ?, `name` = ? where `users`.`id` = ?', ['foo', 'bar', 1]).andReturn(1);
     $result = builder.from('users').join('orders', 'users.id', '=', 'orders.user_id').where('users.id', '=', 1).update({'email': 'foo', 'name': 'bar'});
     $this.assertEquals(1, $result);
 
-    builder = $this.getMysqlBuilder();
+    builder = getMysqlBuilder();
     builder.getConnection().shouldReceive('update').once().with('update `users` inner join `orders` on `users`.`id` = `orders`.`user_id` and `users`.`id` = ? set `email` = ?, `name` = ?', [1, 'foo', 'bar']).andReturn(1);
     $result = builder.from('users').join('orders', function ($join) {
         $join.on('users.id', '=', 'orders.user_id')
@@ -3114,17 +3144,17 @@ test('UpdateMethodWithJoinsOnMySql', () =>
 
 test('UpdateMethodWithJoinsOnSQLite', () =>
 {
-    builder = $this.getSQLiteBuilder();
+    builder = getSQLiteBuilder();
     builder.getConnection().shouldReceive('update').once().with('update "users" set "email" = ?, "name" = ? where "rowid" in (select "users"."rowid" from "users" where "users"."id" > ? order by "id" asc limit 3)', ['foo', 'bar', 1]).andReturn(1);
     $result = builder.from('users').where('users.id', '>', 1).limit(3).oldest('id').update({'email': 'foo', 'name': 'bar'});
     $this.assertEquals(1, $result);
 
-    builder = $this.getSQLiteBuilder();
+    builder = getSQLiteBuilder();
     builder.getConnection().shouldReceive('update').once().with('update "users" set "email" = ?, "name" = ? where "rowid" in (select "users"."rowid" from "users" inner join "orders" on "users"."id" = "orders"."user_id" where "users"."id" = ?)', ['foo', 'bar', 1]).andReturn(1);
     $result = builder.from('users').join('orders', 'users.id', '=', 'orders.user_id').where('users.id', '=', 1).update({'email': 'foo', 'name': 'bar'});
     $this.assertEquals(1, $result);
 
-    builder = $this.getSQLiteBuilder();
+    builder = getSQLiteBuilder();
     builder.getConnection().shouldReceive('update').once().with('update "users" set "email" = ?, "name" = ? where "rowid" in (select "users"."rowid" from "users" inner join "orders" on "users"."id" = "orders"."user_id" and "users"."id" = ?)', ['foo', 'bar', 1]).andReturn(1);
     $result = builder.from('users').join('orders', function ($join) {
         $join.on('users.id', '=', 'orders.user_id')
@@ -3132,7 +3162,7 @@ test('UpdateMethodWithJoinsOnSQLite', () =>
     }).update({'email': 'foo', 'name': 'bar'});
     $this.assertEquals(1, $result);
 
-    builder = $this.getSQLiteBuilder();
+    builder = getSQLiteBuilder();
     builder.getConnection().shouldReceive('update').once().with('update "users" as "u" set "email" = ?, "name" = ? where "rowid" in (select "u"."rowid" from "users" as "u" inner join "orders" as "o" on "u"."id" = "o"."user_id")', ['foo', 'bar']).andReturn(1);
     $result = builder.from('users as u').join('orders as o', 'u.id', '=', 'o.user_id').update({'email': 'foo', 'name': 'bar'});
     $this.assertEquals(1, $result);
@@ -3140,7 +3170,7 @@ test('UpdateMethodWithJoinsOnSQLite', () =>
 
 test('UpdateMethodWithJoinsAndAliasesOnSqlServer', () =>
 {
-    const builder = $this.getSqlServerBuilder();
+    const builder = getSqlServerBuilder();
     builder.getConnection().shouldReceive('update').once().with('update [u] set [email] = ?, [name] = ? from [users] as [u] inner join [orders] on [u].[id] = [orders].[user_id] where [u].[id] = ?', ['foo', 'bar', 1]).andReturn(1);
     $result = builder.from('users as u').join('orders', 'u.id', '=', 'orders.user_id').where('u.id', '=', 1).update({'email': 'foo', 'name': 'bar'});
     $this.assertEquals(1, $result);
@@ -3148,17 +3178,17 @@ test('UpdateMethodWithJoinsAndAliasesOnSqlServer', () =>
 
 test('UpdateMethodWithoutJoinsOnPostgres', () =>
 {
-    const builder = $this.getPostgresBuilder();
+    const builder = getPostgresBuilder();
     builder.getConnection().shouldReceive('update').once().with('update "users" set "email" = ?, "name" = ? where "id" = ?', ['foo', 'bar', 1]).andReturn(1);
     $result = builder.from('users').where('id', '=', 1).update({'users.email': 'foo', 'name': 'bar'});
     $this.assertEquals(1, $result);
 
-    builder = $this.getPostgresBuilder();
+    builder = getPostgresBuilder();
     builder.getConnection().shouldReceive('update').once().with('update "users" set "email" = ?, "name" = ? where "id" = ?', ['foo', 'bar', 1]).andReturn(1);
     $result = builder.from('users').where('id', '=', 1).selectRaw('?', ['ignore']).update({'users.email': 'foo', 'name': 'bar'});
     $this.assertEquals(1, $result);
 
-    builder = $this.getPostgresBuilder();
+    builder = getPostgresBuilder();
     builder.getConnection().shouldReceive('update').once().with('update "users"."users" set "email" = ?, "name" = ? where "id" = ?', ['foo', 'bar', 1]).andReturn(1);
     $result = builder.from('users.users').where('id', '=', 1).selectRaw('?', ['ignore']).update({'users.users.email': 'foo', 'name': 'bar'});
     $this.assertEquals(1, $result);
@@ -3166,12 +3196,12 @@ test('UpdateMethodWithoutJoinsOnPostgres', () =>
 
 test('UpdateMethodWithJoinsOnPostgres', () =>
 {
-    const builder = $this.getPostgresBuilder();
+    const builder = getPostgresBuilder();
     builder.getConnection().shouldReceive('update').once().with('update "users" set "email" = ?, "name" = ? where "ctid" in (select "users"."ctid" from "users" inner join "orders" on "users"."id" = "orders"."user_id" where "users"."id" = ?)', ['foo', 'bar', 1]).andReturn(1);
     $result = builder.from('users').join('orders', 'users.id', '=', 'orders.user_id').where('users.id', '=', 1).update({'email': 'foo', 'name': 'bar'});
     $this.assertEquals(1, $result);
 
-    builder = $this.getPostgresBuilder();
+    builder = getPostgresBuilder();
     builder.getConnection().shouldReceive('update').once().with('update "users" set "email" = ?, "name" = ? where "ctid" in (select "users"."ctid" from "users" inner join "orders" on "users"."id" = "orders"."user_id" and "users"."id" = ?)', ['foo', 'bar', 1]).andReturn(1);
     $result = builder.from('users').join('orders', function ($join) {
         $join.on('users.id', '=', 'orders.user_id')
@@ -3179,7 +3209,7 @@ test('UpdateMethodWithJoinsOnPostgres', () =>
     }).update({'email': 'foo', 'name': 'bar'});
     $this.assertEquals(1, $result);
 
-    builder = $this.getPostgresBuilder();
+    builder = getPostgresBuilder();
     builder.getConnection().shouldReceive('update').once().with('update "users" set "email" = ?, "name" = ? where "ctid" in (select "users"."ctid" from "users" inner join "orders" on "users"."id" = "orders"."user_id" and "users"."id" = ? where "name" = ?)', ['foo', 'bar', 1, 'baz']).andReturn(1);
     $result = builder.from('users')
         .join('orders', function ($join) {
@@ -3192,12 +3222,12 @@ test('UpdateMethodWithJoinsOnPostgres', () =>
 
 test('UpdateFromMethodWithJoinsOnPostgres', () =>
 {
-    const builder = $this.getPostgresBuilder();
+    const builder = getPostgresBuilder();
     builder.getConnection().shouldReceive('update').once().with('update "users" set "email" = ?, "name" = ? from "orders" where "users"."id" = ? and "users"."id" = "orders"."user_id"', ['foo', 'bar', 1]).andReturn(1);
     $result = builder.from('users').join('orders', 'users.id', '=', 'orders.user_id').where('users.id', '=', 1).updateFrom({'email': 'foo', 'name': 'bar'});
     $this.assertEquals(1, $result);
 
-    builder = $this.getPostgresBuilder();
+    builder = getPostgresBuilder();
     builder.getConnection().shouldReceive('update').once().with('update "users" set "email" = ?, "name" = ? from "orders" where "users"."id" = "orders"."user_id" and "users"."id" = ?', ['foo', 'bar', 1]).andReturn(1);
     $result = builder.from('users').join('orders', function ($join) {
         $join.on('users.id', '=', 'orders.user_id')
@@ -3205,7 +3235,7 @@ test('UpdateFromMethodWithJoinsOnPostgres', () =>
     }).updateFrom({'email': 'foo', 'name': 'bar'});
     $this.assertEquals(1, $result);
 
-    builder = $this.getPostgresBuilder();
+    builder = getPostgresBuilder();
     builder.getConnection().shouldReceive('update').once().with('update "users" set "email" = ?, "name" = ? from "orders" where "name" = ? and "users"."id" = "orders"."user_id" and "users"."id" = ?', ['foo', 'bar', 'baz', 1]).andReturn(1);
     $result = builder.from('users')
         .join('orders', function ($join) {
@@ -3290,22 +3320,22 @@ test('DeleteMethod', () =>
     $result = builder.from('users').selectRaw('?', ['ignore']).delete(1);
     $this.assertEquals(1, $result);
 
-    builder = $this.getSqliteBuilder();
+    builder = getSQLiteBuilder();
     builder.getConnection().shouldReceive('delete').once().with('delete from "users" where "rowid" in (select "users"."rowid" from "users" where "email" = ? order by "id" asc limit 1)', ['foo']).andReturn(1);
     $result = builder.from('users').where('email', '=', 'foo').orderBy('id').take(1).delete();
     $this.assertEquals(1, $result);
 
-    builder = $this.getMysqlBuilder();
+    builder = getMysqlBuilder();
     builder.getConnection().shouldReceive('delete').once().with('delete from `users` where `email` = ? order by `id` asc limit 1', ['foo']).andReturn(1);
     $result = builder.from('users').where('email', '=', 'foo').orderBy('id').take(1).delete();
     $this.assertEquals(1, $result);
 
-    builder = $this.getSqlServerBuilder();
+    builder = getSqlServerBuilder();
     builder.getConnection().shouldReceive('delete').once().with('delete from [users] where [email] = ?', ['foo']).andReturn(1);
     $result = builder.from('users').where('email', '=', 'foo').delete();
     $this.assertEquals(1, $result);
 
-    builder = $this.getSqlServerBuilder();
+    builder = getSqlServerBuilder();
     builder.getConnection().shouldReceive('delete').once().with('delete top (1) from [users] where [email] = ?', ['foo']).andReturn(1);
     $result = builder.from('users').where('email', '=', 'foo').orderBy('id').take(1).delete();
     $this.assertEquals(1, $result);
@@ -3313,62 +3343,62 @@ test('DeleteMethod', () =>
 
 test('DeleteWithJoinMethod', () =>
 {
-    const builder = $this.getSqliteBuilder();
+    const builder = getSQLiteBuilder();
     builder.getConnection().shouldReceive('delete').once().with('delete from "users" where "rowid" in (select "users"."rowid" from "users" inner join "contacts" on "users"."id" = "contacts"."id" where "users"."email" = ? order by "users"."id" asc limit 1)', ['foo']).andReturn(1);
     $result = builder.from('users').join('contacts', 'users.id', '=', 'contacts.id').where('users.email', '=', 'foo').orderBy('users.id').limit(1).delete();
     $this.assertEquals(1, $result);
 
-    builder = $this.getSqliteBuilder();
+    builder = getSQLiteBuilder();
     builder.getConnection().shouldReceive('delete').once().with('delete from "users" as "u" where "rowid" in (select "u"."rowid" from "users" as "u" inner join "contacts" as "c" on "u"."id" = "c"."id")', []).andReturn(1);
     $result = builder.from('users as u').join('contacts as c', 'u.id', '=', 'c.id').delete();
     $this.assertEquals(1, $result);
 
-    builder = $this.getMysqlBuilder();
+    builder = getMysqlBuilder();
     builder.getConnection().shouldReceive('delete').once().with('delete `users` from `users` inner join `contacts` on `users`.`id` = `contacts`.`id` where `email` = ?', ['foo']).andReturn(1);
     $result = builder.from('users').join('contacts', 'users.id', '=', 'contacts.id').where('email', '=', 'foo').orderBy('id').limit(1).delete();
     $this.assertEquals(1, $result);
 
-    builder = $this.getMysqlBuilder();
+    builder = getMysqlBuilder();
     builder.getConnection().shouldReceive('delete').once().with('delete `a` from `users` as `a` inner join `users` as `b` on `a`.`id` = `b`.`user_id` where `email` = ?', ['foo']).andReturn(1);
     $result = builder.from('users AS a').join('users AS b', 'a.id', '=', 'b.user_id').where('email', '=', 'foo').orderBy('id').limit(1).delete();
     $this.assertEquals(1, $result);
 
-    builder = $this.getMysqlBuilder();
+    builder = getMysqlBuilder();
     builder.getConnection().shouldReceive('delete').once().with('delete `users` from `users` inner join `contacts` on `users`.`id` = `contacts`.`id` where `users`.`id` = ?', [1]).andReturn(1);
     $result = builder.from('users').join('contacts', 'users.id', '=', 'contacts.id').orderBy('id').take(1).delete(1);
     $this.assertEquals(1, $result);
 
-    builder = $this.getSqlServerBuilder();
+    builder = getSqlServerBuilder();
     builder.getConnection().shouldReceive('delete').once().with('delete [users] from [users] inner join [contacts] on [users].[id] = [contacts].[id] where [email] = ?', ['foo']).andReturn(1);
     $result = builder.from('users').join('contacts', 'users.id', '=', 'contacts.id').where('email', '=', 'foo').delete();
     $this.assertEquals(1, $result);
 
-    builder = $this.getSqlServerBuilder();
+    builder = getSqlServerBuilder();
     builder.getConnection().shouldReceive('delete').once().with('delete [a] from [users] as [a] inner join [users] as [b] on [a].[id] = [b].[user_id] where [email] = ?', ['foo']).andReturn(1);
     $result = builder.from('users AS a').join('users AS b', 'a.id', '=', 'b.user_id').where('email', '=', 'foo').orderBy('id').limit(1).delete();
     $this.assertEquals(1, $result);
 
-    builder = $this.getSqlServerBuilder();
+    builder = getSqlServerBuilder();
     builder.getConnection().shouldReceive('delete').once().with('delete [users] from [users] inner join [contacts] on [users].[id] = [contacts].[id] where [users].[id] = ?', [1]).andReturn(1);
     $result = builder.from('users').join('contacts', 'users.id', '=', 'contacts.id').delete(1);
     $this.assertEquals(1, $result);
 
-    builder = $this.getPostgresBuilder();
+    builder = getPostgresBuilder();
     builder.getConnection().shouldReceive('delete').once().with('delete from "users" where "ctid" in (select "users"."ctid" from "users" inner join "contacts" on "users"."id" = "contacts"."id" where "users"."email" = ?)', ['foo']).andReturn(1);
     $result = builder.from('users').join('contacts', 'users.id', '=', 'contacts.id').where('users.email', '=', 'foo').delete();
     $this.assertEquals(1, $result);
 
-    builder = $this.getPostgresBuilder();
+    builder = getPostgresBuilder();
     builder.getConnection().shouldReceive('delete').once().with('delete from "users" as "a" where "ctid" in (select "a"."ctid" from "users" as "a" inner join "users" as "b" on "a"."id" = "b"."user_id" where "email" = ? order by "id" asc limit 1)', ['foo']).andReturn(1);
     $result = builder.from('users AS a').join('users AS b', 'a.id', '=', 'b.user_id').where('email', '=', 'foo').orderBy('id').limit(1).delete();
     $this.assertEquals(1, $result);
 
-    builder = $this.getPostgresBuilder();
+    builder = getPostgresBuilder();
     builder.getConnection().shouldReceive('delete').once().with('delete from "users" where "ctid" in (select "users"."ctid" from "users" inner join "contacts" on "users"."id" = "contacts"."id" where "users"."id" = ? order by "id" asc limit 1)', [1]).andReturn(1);
     $result = builder.from('users').join('contacts', 'users.id', '=', 'contacts.id').orderBy('id').take(1).delete(1);
     $this.assertEquals(1, $result);
 
-    builder = $this.getPostgresBuilder();
+    builder = getPostgresBuilder();
     builder.getConnection().shouldReceive('delete').once().with('delete from "users" where "ctid" in (select "users"."ctid" from "users" inner join "contacts" on "users"."id" = "contacts"."user_id" and "users"."id" = ? where "name" = ?)', [1, 'baz']).andReturn(1);
     $result = builder.from('users')
         .join('contacts', function ($join) {
@@ -3378,7 +3408,7 @@ test('DeleteWithJoinMethod', () =>
         .delete();
     $this.assertEquals(1, $result);
 
-    builder = $this.getPostgresBuilder();
+    builder = getPostgresBuilder();
     builder.getConnection().shouldReceive('delete').once().with('delete from "users" where "ctid" in (select "users"."ctid" from "users" inner join "contacts" on "users"."id" = "contacts"."id")', []).andReturn(1);
     $result = builder.from('users').join('contacts', 'users.id', '=', 'contacts.id').delete();
     $this.assertEquals(1, $result);
@@ -3461,7 +3491,7 @@ test('PreservedAreAppliedByInsertUsing', () =>
 
 test('PreservedAreAppliedByUpsert', () =>
 {
-    const builder = $this.getMysqlBuilder();
+    const builder = getMysqlBuilder();
     builder.getConnection()
         .shouldReceive('getConfig').with('use_upsert_alias').andReturn(false)
         .shouldReceive('affectingStatement').once().with('insert into `users` (`email`) values (?) on duplicate key update `email` = values(`email`)', ['foo']);
@@ -3470,7 +3500,7 @@ test('PreservedAreAppliedByUpsert', () =>
     });
     builder.upsert({'email': 'foo'}, 'id');
 
-    builder = $this.getMysqlBuilder();
+    builder = getMysqlBuilder();
     builder.getConnection()
         .shouldReceive('getConfig').with('use_upsert_alias').andReturn(true)
         .shouldReceive('affectingStatement').once().with('insert into `users` (`email`) values (?) as laravel_upsert_alias on duplicate key update `email` = `laravel_upsert_alias`.`email`', ['foo']);
@@ -3522,7 +3552,7 @@ test('PreservedAreAppliedByExists', () =>
 
 test('PostgresInsertGetId', () =>
 {
-    const builder = $this.getPostgresBuilder();
+    const builder = getPostgresBuilder();
     builder.getProcessor().shouldReceive('processInsertGetId').once().with(builder, 'insert into "users" ("email") values (?) returning "id"', ['foo'], 'id').andReturn(1);
     $result = builder.from('users').insertGetId({'email': 'foo'}, 'id');
     $this.assertEquals(1, $result);
@@ -3530,7 +3560,7 @@ test('PostgresInsertGetId', () =>
 
 test('MySqlWrapping', () =>
 {
-    const builder = $this.getMysqlBuilder();
+    const builder = getMysqlBuilder();
     builder.select(['*']).from('users');
     expect('select * from `users`').toBe(builder.toSql());
 })
@@ -3654,11 +3684,11 @@ test('MySqlUpdateWithJsonPreparesBindingsCorrectly', () =>
     builder = new Builder($connection, $grammar, $processor);
     builder.from('users').where('id', '=', 0).update(['options.size': 45, 'updated_at': '2015-05-26 22:02:06']);
 
-    const builder = $this.getMysqlBuilder();
+    const builder = getMysqlBuilder();
     builder.getConnection().shouldReceive('update').once().with('update `users` set `options` = json_set(`options`, \'$."size"\', ?)', [null]);
     builder.from('users').update(['options.size': null]);
 
-    const builder = $this.getMysqlBuilder();
+    const builder = getMysqlBuilder();
     builder.getConnection().shouldReceive('update').once().with('update `users` set `options` = json_set(`options`, \'$."size"\', 45)', []);
     builder.from('users').update(['options.size': new Raw('45')]);
     */
@@ -3666,12 +3696,12 @@ test('MySqlUpdateWithJsonPreparesBindingsCorrectly', () =>
 
 test('PostgresUpdateWrappingJson', () =>
 {
-    const builder = $this.getPostgresBuilder();
+    const builder = getPostgresBuilder();
     builder.getConnection().shouldReceive('update')
         .with('update "users" set "options" = jsonb_set("options"::jsonb, \'{"name","first_name"}\', ?)', ['"John"']);
     builder.from('users').update({'users.options.name.first_name': 'John'});
 
-    builder = $this.getPostgresBuilder();
+    builder = getPostgresBuilder();
     builder.getConnection().shouldReceive('update')
         .with('update "users" set "options" = jsonb_set("options"::jsonb, \'{"language"}\', \'null\')', []);
     builder.from('users').update({'options.language': new Raw("'null'")});
@@ -3679,7 +3709,7 @@ test('PostgresUpdateWrappingJson', () =>
 
 test('PostgresUpdateWrappingJsonArray', () =>
 {
-    const builder = $this.getPostgresBuilder();
+    const builder = getPostgresBuilder();
     builder.getConnection().shouldReceive('update')
         .with('update "users" set "options" = ?, "meta" = jsonb_set("meta"::jsonb, \'{"tags"}\', ?), "group_id" = 45, "created_at" = ?', [
             json_encode({'2fa': false, 'presets': ['laravel', 'vue']}),
@@ -3697,7 +3727,7 @@ test('PostgresUpdateWrappingJsonArray', () =>
 
 test('PostgresUpdateWrappingJsonPathArrayIndex', () =>
 {
-    const builder = $this.getPostgresBuilder();
+    const builder = getPostgresBuilder();
     builder.getConnection().shouldReceive('update')
         .with('update "users" set "options" = jsonb_set("options"::jsonb, \'{1,"2fa"}\', ?), "meta" = jsonb_set("meta"::jsonb, \'{"tags",0,2}\', ?) where ("options".1.\'2fa\')::jsonb = \'true\'::jsonb', [
             'false',
@@ -3712,7 +3742,7 @@ test('PostgresUpdateWrappingJsonPathArrayIndex', () =>
 
 test('SQLiteUpdateWrappingJsonArray', () =>
 {
-    builder = $this.getSQLiteBuilder();
+    builder = getSQLiteBuilder();
 
     builder.getConnection().shouldReceive('update')
         .with('update "users" set "options" = ?, "group_id" = 45, "created_at" = ?', [
@@ -3729,7 +3759,7 @@ test('SQLiteUpdateWrappingJsonArray', () =>
 
 test('SQLiteUpdateWrappingNestedJsonArray', () =>
 {
-    builder = $this.getSQLiteBuilder();
+    builder = getSQLiteBuilder();
     builder.getConnection().shouldReceive('update')
         .with('update "users" set "group_id" = 45, "created_at" = ?, "options" = json_patch(ifnull("options", json(\'{}\')), json(?))', [
             new DateTime('2019-08-06'),
@@ -3747,7 +3777,7 @@ test('SQLiteUpdateWrappingNestedJsonArray', () =>
 
 test('SQLiteUpdateWrappingJsonPathArrayIndex', () =>
 {
-    builder = $this.getSQLiteBuilder();
+    builder = getSQLiteBuilder();
     builder.getConnection().shouldReceive('update')
         .with('update "users" set "options" = json_patch(ifnull("options", json(\'{}\')), json(?)), "meta" = json_patch(ifnull("meta", json(\'{}\')), json(?)) where json_extract("options", \'$[1]."2fa"\') = true', [
             '{"[1]":{"2fa":false}}',
@@ -3762,7 +3792,7 @@ test('SQLiteUpdateWrappingJsonPathArrayIndex', () =>
 
 test('MySqlWrappingJsonWithString', () =>
 {
-    const builder = $this.getMysqlBuilder();
+    const builder = getMysqlBuilder();
     builder.select(['*']).from('users').where('items.sku', '=', 'foo-bar');
     expect('select * from `users` where json_unquote(json_extract(`items`, \'$."sku"\')) = ?').toBe(builder.toSql());
     $this.assertCount(1, builder.getRawBindings()['where']);
@@ -3771,32 +3801,32 @@ test('MySqlWrappingJsonWithString', () =>
 
 test('MySqlWrappingJsonWithInteger', () =>
 {
-    const builder = $this.getMysqlBuilder();
+    const builder = getMysqlBuilder();
     builder.select(['*']).from('users').where('items.price', '=', 1);
     expect('select * from `users` where json_unquote(json_extract(`items`, \'$."price"\')) = ?').toBe(builder.toSql());
 })
 
 test('MySqlWrappingJsonWithDouble', () =>
 {
-    const builder = $this.getMysqlBuilder();
+    const builder = getMysqlBuilder();
     builder.select(['*']).from('users').where('items.price', '=', 1.5);
     expect('select * from `users` where json_unquote(json_extract(`items`, \'$."price"\')) = ?').toBe(builder.toSql());
 })
 
 test('MySqlWrappingJsonWithBoolean', () =>
 {
-    const builder = $this.getMysqlBuilder();
+    const builder = getMysqlBuilder();
     builder.select(['*']).from('users').where('items.available', '=', true);
     expect('select * from `users` where json_extract(`items`, \'$."available"\') = true').toBe(builder.toSql());
 
-    builder = $this.getMysqlBuilder();
+    builder = getMysqlBuilder();
     builder.select(['*']).from('users').where(new Raw("items.'$.available'"), '=', true);
     expect("select * from `users` where items.'$.available' = true").toBe(builder.toSql());
 })
 
 test('MySqlWrappingJsonWithBooleanAndIntegerThatLooksLikeOne', () =>
 {
-    const builder = $this.getMysqlBuilder();
+    const builder = getMysqlBuilder();
     builder.select(['*']).from('users').where('items.available', '=', true).where('items.active', '=', false).where('items.number_available', '=', 0);
     expect('select * from `users` where json_extract(`items`, \'$."available"\') = true and json_extract(`items`, \'$."active"\') = false and json_unquote(json_extract(`items`, \'$."number_available"\')) = ?').toBe(builder.toSql());
 })
@@ -3805,133 +3835,133 @@ test('JsonPathEscaping', () =>
 {
     $expectedWithJsonEscaped = `select json_unquote(json_extract(\`json\`, '$."''))#"'))`;
 
-    const builder = $this.getMysqlBuilder();
+    const builder = getMysqlBuilder();
     builder.select("json.'))#");
     $this.assertEquals($expectedWithJsonEscaped).toBe(builder.toSql());
 
-    builder = $this.getMysqlBuilder();
+    builder = getMysqlBuilder();
     builder.select("json.\'))#");
     $this.assertEquals($expectedWithJsonEscaped).toBe(builder.toSql());
 
-    builder = $this.getMysqlBuilder();
+    builder = getMysqlBuilder();
     builder.select("json.\\'))#");
     $this.assertEquals($expectedWithJsonEscaped).toBe(builder.toSql());
 
-    builder = $this.getMysqlBuilder();
+    builder = getMysqlBuilder();
     builder.select("json.\\\'))#");
     $this.assertEquals($expectedWithJsonEscaped).toBe(builder.toSql());
 })
 
 test('MySqlWrappingJson', () =>
 {
-    const builder = $this.getMysqlBuilder();
+    const builder = getMysqlBuilder();
     builder.select(['*']).from('users').whereRaw('items.\'$."price"\' = 1');
     expect('select * from `users` where items.\'$."price"\' = 1').toBe(builder.toSql());
 
-    builder = $this.getMysqlBuilder();
+    builder = getMysqlBuilder();
     builder.select('items.price').from('users').where('users.items.price', '=', 1).orderBy('items.price');
     expect('select json_unquote(json_extract(`items`, \'$."price"\')) from `users` where json_unquote(json_extract(`users`.`items`, \'$."price"\')) = ? order by json_unquote(json_extract(`items`, \'$."price"\')) asc').toBe(builder.toSql());
 
-    builder = $this.getMysqlBuilder();
+    builder = getMysqlBuilder();
     builder.select(['*']).from('users').where('items.price.in_usd', '=', 1);
     expect('select * from `users` where json_unquote(json_extract(`items`, \'$."price"."in_usd"\')) = ?').toBe(builder.toSql());
 
-    builder = $this.getMysqlBuilder();
+    builder = getMysqlBuilder();
     builder.select(['*']).from('users').where('items.price.in_usd', '=', 1).where('items.age', '=', 2);
     expect('select * from `users` where json_unquote(json_extract(`items`, \'$."price"."in_usd"\')) = ? and json_unquote(json_extract(`items`, \'$."age"\')) = ?').toBe(builder.toSql());
 })
 
 test('PostgresWrappingJson', () =>
 {
-    const builder = $this.getPostgresBuilder();
+    const builder = getPostgresBuilder();
     builder.select('items.price').from('users').where('users.items.price', '=', 1).orderBy('items.price');
     expect('select "items".>\'price\' from "users" where "users"."items".>\'price\' = ? order by "items".>\'price\' asc').toBe(builder.toSql());
 
     
-    builder = $this.getPostgresBuilder();
+    builder = getPostgresBuilder();
     builder.select(['*']).from('users').where('items.price.in_usd', '=', 1);
     expect('select * from "users" where "items".\'price\'.>\'in_usd\' = ?').toBe(builder.toSql());
 
     
-    builder = $this.getPostgresBuilder();
+    builder = getPostgresBuilder();
     builder.select(['*']).from('users').where('items.price.in_usd', '=', 1).where('items.age', '=', 2);
     expect('select * from "users" where "items".\'price\'.>\'in_usd\' = ? and "items".>\'age\' = ?').toBe(builder.toSql());
 
     
-    builder = $this.getPostgresBuilder();
+    builder = getPostgresBuilder();
     builder.select(['*']).from('users').where('items.prices.0', '=', 1).where('items.age', '=', 2);
     expect('select * from "users" where "items".\'prices\'.>0 = ? and "items".>\'age\' = ?').toBe(builder.toSql());
 
     
-    builder = $this.getPostgresBuilder();
+    builder = getPostgresBuilder();
     builder.select(['*']).from('users').where('items.available', '=', true);
     expect('select * from "users" where ("items".\'available\')::jsonb = \'true\'::jsonb').toBe(builder.toSql());
 })
 
 test('SqlServerWrappingJson', () =>
 {
-    const builder = $this.getSqlServerBuilder();
+    const builder = getSqlServerBuilder();
     builder.select('items.price').from('users').where('users.items.price', '=', 1).orderBy('items.price');
     expect('select json_value([items], \'$."price"\') from [users] where json_value([users].[items], \'$."price"\') = ? order by json_value([items], \'$."price"\') asc').toBe(builder.toSql());
 
-    builder = $this.getSqlServerBuilder();
+    builder = getSqlServerBuilder();
     builder.select(['*']).from('users').where('items.price.in_usd', '=', 1);
     expect('select * from [users] where json_value([items], \'$."price"."in_usd"\') = ?').toBe(builder.toSql());
 
-    builder = $this.getSqlServerBuilder();
+    builder = getSqlServerBuilder();
     builder.select(['*']).from('users').where('items.price.in_usd', '=', 1).where('items.age', '=', 2);
     expect('select * from [users] where json_value([items], \'$."price"."in_usd"\') = ? and json_value([items], \'$."age"\') = ?').toBe(builder.toSql());
 
-    builder = $this.getSqlServerBuilder();
+    builder = getSqlServerBuilder();
     builder.select(['*']).from('users').where('items.available', '=', true);
     expect('select * from [users] where json_value([items], \'$."available"\') = \'true\'').toBe(builder.toSql());
 })
 
 test('SqliteWrappingJson', () =>
 {
-    const builder = $this.getSQLiteBuilder();
+    const builder = getSQLiteBuilder();
     builder.select('items.price').from('users').where('users.items.price', '=', 1).orderBy('items.price');
     expect('select json_extract("items", \'$."price"\') from "users" where json_extract("users"."items", \'$."price"\') = ? order by json_extract("items", \'$."price"\') asc').toBe(builder.toSql());
 
-    builder = $this.getSQLiteBuilder();
+    builder = getSQLiteBuilder();
     builder.select(['*']).from('users').where('items.price.in_usd', '=', 1);
     expect('select * from "users" where json_extract("items", \'$."price"."in_usd"\') = ?').toBe(builder.toSql());
 
-    builder = $this.getSQLiteBuilder();
+    builder = getSQLiteBuilder();
     builder.select(['*']).from('users').where('items.price.in_usd', '=', 1).where('items.age', '=', 2);
     expect('select * from "users" where json_extract("items", \'$."price"."in_usd"\') = ? and json_extract("items", \'$."age"\') = ?').toBe(builder.toSql());
 
-    builder = $this.getSQLiteBuilder();
+    builder = getSQLiteBuilder();
     builder.select(['*']).from('users').where('items.available', '=', true);
     expect('select * from "users" where json_extract("items", \'$."available"\') = true').toBe(builder.toSql());
 })
 
 test('SQLiteOrderBy', () =>
 {
-    const builder = $this.getSQLiteBuilder();
+    const builder = getSQLiteBuilder();
     builder.select(['*']).from('users').orderBy('email', 'desc');
     expect('select * from "users" order by "email" desc').toBe(builder.toSql());
 })
 
 test('SqlServerLimitsAndOffsets', () =>
 {
-    const builder = $this.getSqlServerBuilder();
+    const builder = getSqlServerBuilder();
     builder.select(['*']).from('users').take(10);
     expect('select top 10 * from [users]').toBe(builder.toSql());
 
-    builder = $this.getSqlServerBuilder();
+    builder = getSqlServerBuilder();
     builder.select(['*']).from('users').skip(10).orderBy('email', 'desc');
     expect('select * from [users] order by [email] desc offset 10 rows').toBe(builder.toSql());
 
-    builder = $this.getSqlServerBuilder();
+    builder = getSqlServerBuilder();
     builder.select(['*']).from('users').skip(10).take(10);
     expect('select * from [users] order by (SELECT 0) offset 10 rows fetch next 10 rows only').toBe(builder.toSql());
 
-    builder = $this.getSqlServerBuilder();
+    builder = getSqlServerBuilder();
     builder.select(['*']).from('users').skip(11).take(10).orderBy('email', 'desc');
     expect('select * from [users] order by [email] desc offset 11 rows fetch next 10 rows only').toBe(builder.toSql());
 
-    builder = $this.getSqlServerBuilder();
+    builder = getSqlServerBuilder();
     $subQuery = function ($query) {
         return $query.select('created_at').from('logins').where('users.name', 'nameBinding').whereColumn('user_id', 'users.id').limit(1);
     };
@@ -3939,22 +3969,22 @@ test('SqlServerLimitsAndOffsets', () =>
     expect('select * from [users] where [email] = ? order by (select top 1 [created_at] from [logins] where [users].[name] = ? and [user_id] = [users].[id]) asc offset 10 rows fetch next 10 rows only').toBe(builder.toSql());
     $this.assertEquals(['emailBinding', 'nameBinding'], builder.getBindings());
 
-    builder = $this.getSqlServerBuilder();
+    builder = getSqlServerBuilder();
     builder.select(['*']).from('users').take('foo');
     expect('select * from [users]').toBe(builder.toSql());
 
-    builder = $this.getSqlServerBuilder();
+    builder = getSqlServerBuilder();
     builder.select(['*']).from('users').take('foo').offset('bar');
     expect('select * from [users]').toBe(builder.toSql());
 
-    builder = $this.getSqlServerBuilder();
+    builder = getSqlServerBuilder();
     builder.select(['*']).from('users').offset('bar');
     expect('select * from [users]').toBe(builder.toSql());
 })
 
 test('MySqlSoundsLikeOperator', () =>
 {
-    const builder = $this.getMysqlBuilder();
+    const builder = getMysqlBuilder();
     builder.select(['*']).from('users').where('name', 'sounds like', 'John Doe');
     expect('select * from `users` where `name` sounds like ?').toBe(builder.toSql());
     $this.assertEquals(['John Doe'], builder.getBindings());
@@ -3966,15 +3996,15 @@ test('BitwiseOperators', () =>
     builder.select(['*']).from('users').where('bar', '&', 1);
     expect('select * from "users" where "bar" & ?').toBe(builder.toSql());
 
-    builder = $this.getPostgresBuilder();
+    builder = getPostgresBuilder();
     builder.select(['*']).from('users').where('bar', '#', 1);
     expect('select * from "users" where ("bar" # ?)::bool').toBe(builder.toSql());
 
-    builder = $this.getPostgresBuilder();
+    builder = getPostgresBuilder();
     builder.select(['*']).from('users').where('range', '>>', '[2022-01-08 00:00:00,2022-01-09 00:00:00)');
     expect('select * from "users" where ("range" >> ?)::bool').toBe(builder.toSql());
 
-    builder = $this.getSqlServerBuilder();
+    builder = getSqlServerBuilder();
     builder.select(['*']).from('users').where('bar', '&', 1);
     expect('select * from [users] where ([bar] & ?) != 0').toBe(builder.toSql());
 
@@ -3982,15 +4012,15 @@ test('BitwiseOperators', () =>
     builder.select(['*']).from('users').having('bar', '&', 1);
     expect('select * from "users" having "bar" & ?').toBe(builder.toSql());
 
-    builder = $this.getPostgresBuilder();
+    builder = getPostgresBuilder();
     builder.select(['*']).from('users').having('bar', '#', 1);
     expect('select * from "users" having ("bar" # ?)::bool').toBe(builder.toSql());
 
-    builder = $this.getPostgresBuilder();
+    builder = getPostgresBuilder();
     builder.select(['*']).from('users').having('range', '>>', '[2022-01-08 00:00:00,2022-01-09 00:00:00)');
     expect('select * from "users" having ("range" >> ?)::bool').toBe(builder.toSql());
 
-    builder = $this.getSqlServerBuilder();
+    builder = getSqlServerBuilder();
     builder.select(['*']).from('users').having('bar', '&', 1);
     expect('select * from [users] having ([bar] & ?) != 0').toBe(builder.toSql());
 })
@@ -4001,7 +4031,7 @@ test('MergeWheresCanMergeWheresAndBindings', () =>
     builder.wheres = ['foo'];
     builder.mergeWheres(['wheres'], ['foo', 'bar']);
     $this.assertEquals(['foo', 'wheres'], builder.wheres);
-    $this.assertEquals(['foo', 'bar'], builder.getBindings());
+    expect(builder.getBindings()).toBe(['foo', 'bar']);
 })
 
 test('PrepareValueAndOperator', () =>
@@ -4096,17 +4126,17 @@ test('BuilderThrowsExpectedExceptionWithUndefinedMethod', () =>
 
 test('MySqlLock', () =>
 {
-    const builder = $this.getMysqlBuilder();
+    const builder = getMysqlBuilder();
     builder.select(['*']).from('foo').where('bar', '=', 'baz').lock();
     expect('select * from `foo` where `bar` = ? for update').toBe(builder.toSql());
     $this.assertEquals(['baz'], builder.getBindings());
 
-    builder = $this.getMysqlBuilder();
+    builder = getMysqlBuilder();
     builder.select(['*']).from('foo').where('bar', '=', 'baz').lock(false);
     expect('select * from `foo` where `bar` = ? lock in share mode').toBe(builder.toSql());
     $this.assertEquals(['baz'], builder.getBindings());
 
-    builder = $this.getMysqlBuilder();
+    builder = getMysqlBuilder();
     builder.select(['*']).from('foo').where('bar', '=', 'baz').lock('lock in share mode');
     expect('select * from `foo` where `bar` = ? lock in share mode').toBe(builder.toSql());
     $this.assertEquals(['baz'], builder.getBindings());
@@ -4114,17 +4144,17 @@ test('MySqlLock', () =>
 
 test('PostgresLock', () =>
 {
-    const builder = $this.getPostgresBuilder();
+    const builder = getPostgresBuilder();
     builder.select(['*']).from('foo').where('bar', '=', 'baz').lock();
     expect('select * from "foo" where "bar" = ? for update').toBe(builder.toSql());
     $this.assertEquals(['baz'], builder.getBindings());
 
-    builder = $this.getPostgresBuilder();
+    builder = getPostgresBuilder();
     builder.select(['*']).from('foo').where('bar', '=', 'baz').lock(false);
     expect('select * from "foo" where "bar" = ? for share').toBe(builder.toSql());
     $this.assertEquals(['baz'], builder.getBindings());
 
-    builder = $this.getPostgresBuilder();
+    builder = getPostgresBuilder();
     builder.select(['*']).from('foo').where('bar', '=', 'baz').lock('for key share');
     expect('select * from "foo" where "bar" = ? for key share').toBe(builder.toSql());
     $this.assertEquals(['baz'], builder.getBindings());
@@ -4132,17 +4162,17 @@ test('PostgresLock', () =>
 
 test('SqlServerLock', () =>
 {
-    const builder = $this.getSqlServerBuilder();
+    const builder = getSqlServerBuilder();
     builder.select(['*']).from('foo').where('bar', '=', 'baz').lock();
     expect('select * from [foo] with(rowlock,updlock,holdlock) where [bar] = ?').toBe(builder.toSql());
     $this.assertEquals(['baz'], builder.getBindings());
 
-    builder = $this.getSqlServerBuilder();
+    builder = getSqlServerBuilder();
     builder.select(['*']).from('foo').where('bar', '=', 'baz').lock(false);
     expect('select * from [foo] with(rowlock,holdlock) where [bar] = ?').toBe(builder.toSql());
     $this.assertEquals(['baz'], builder.getBindings());
 
-    builder = $this.getSqlServerBuilder();
+    builder = getSqlServerBuilder();
     builder.select(['*']).from('foo').where('bar', '=', 'baz').lock('with(holdlock)');
     expect('select * from [foo] with(holdlock) where [bar] = ?').toBe(builder.toSql());
     $this.assertEquals(['baz'], builder.getBindings());
@@ -4226,7 +4256,7 @@ test('SubSelect', () =>
     $expectedSql = 'select "foo", "bar", (select "baz" from "two" where "subkey" = ?) as "sub" from "one" where "key" = ?';
     $expectedBindings = ['subval', 'val'];
 
-    const builder = $this.getPostgresBuilder();
+    const builder = getPostgresBuilder();
     builder.from('one').select(['foo', 'bar']).where('key', '=', 'val');
     builder.selectSub(function ($query) {
         $query.from('two').select('baz').where('subkey', '=', 'subval');
@@ -4234,22 +4264,22 @@ test('SubSelect', () =>
     $this.assertEquals($expectedSql).toBe(builder.toSql());
     $this.assertEquals($expectedBindings, builder.getBindings());
 
-    builder = $this.getPostgresBuilder();
+    builder = getPostgresBuilder();
     builder.from('one').select(['foo', 'bar']).where('key', '=', 'val');
-    const $subBuilder = $this.getPostgresBuilder();
+    const $subBuilder = getPostgresBuilder();
     $subBuilder.from('two').select('baz').where('subkey', '=', 'subval');
     builder.selectSub($subBuilder, 'sub');
     $this.assertEquals($expectedSql).toBe(builder.toSql());
     $this.assertEquals($expectedBindings, builder.getBindings());
 
     //$this.expectException(InvalidArgumentException::class);
-    builder = $this.getPostgresBuilder();
+    builder = getPostgresBuilder();
     builder.selectSub(['foo'], 'sub');
 })
 
 test('SubSelectResetBindings', () =>
 {
-    const builder = $this.getPostgresBuilder();
+    const builder = getPostgresBuilder();
     builder.from('one').selectSub(function ($query) {
         $query.from('two').select('baz').where('subkey', '=', 'subval');
     }, 'sub');
@@ -4260,12 +4290,12 @@ test('SubSelectResetBindings', () =>
     builder.select(['*']);
 
     expect('select * from "one"').toBe(builder.toSql());
-    $this.assertEquals([], builder.getBindings());
+    expect(builder.getBindings()).toBe([]);
 })
 
 test('SqlServerWhereDate', () =>
 {
-    const builder = $this.getSqlServerBuilder();
+    const builder = getSqlServerBuilder();
     builder.select(['*']).from('users').whereDate('created_at', '=', '2015-09-23');
     expect('select * from [users] where cast([created_at] as date) = ?').toBe(builder.toSql());
     $this.assertEquals(['2015-09-23'], builder.getBindings());
@@ -4294,11 +4324,11 @@ test('CaseInsensitiveLeadingBooleansAreRemoved', () =>
 
 test('TableValuedFunctionAsTableInSqlServer', () =>
 {
-    const builder = $this.getSqlServerBuilder();
+    const builder = getSqlServerBuilder();
     builder.select(['*']).from('users()');
     expect('select * from [users]()').toBe(builder.toSql());
 
-    builder = $this.getSqlServerBuilder();
+    builder = getSqlServerBuilder();
     builder.select(['*']).from('users(1,2)');
     expect('select * from [users](1,2)').toBe(builder.toSql());
 })
@@ -5243,7 +5273,7 @@ test('WhereRowValues', () =>
     builder = getBuilder();
     builder.select(['*']).from('orders').whereRowValues(['last_update', 'order_number'], '<', [1, new Raw('2')]);
     expect('select * from "orders" where ("last_update", "order_number") < (?, 2)').toBe(builder.toSql());
-    $this.assertEquals([1], builder.getBindings());
+    expect(builder.getBindings()).toBe([1]);
 })
 
 test('WhereRowValuesArityMismatch', () =>
@@ -5257,347 +5287,347 @@ test('WhereRowValuesArityMismatch', () =>
 
 test('WhereJsonContainsMySql', () =>
 {
-    const builder = $this.getMysqlBuilder();
+    const builder = getMysqlBuilder();
     builder.select(['*']).from('users').whereJsonContains('options', ['en']);
     expect('select * from `users` where json_contains(`options`, ?)').toBe(builder.toSql());
     $this.assertEquals(['["en"]'], builder.getBindings());
 
-    builder = $this.getMysqlBuilder();
+    builder = getMysqlBuilder();
     builder.select(['*']).from('users').whereJsonContains('users.options.languages', ['en']);
     expect('select * from `users` where json_contains(`users`.`options`, ?, \'$."languages"\')').toBe(builder.toSql());
     $this.assertEquals(['["en"]'], builder.getBindings());
 
-    builder = $this.getMysqlBuilder();
+    builder = getMysqlBuilder();
     builder.select(['*']).from('users').where('id', '=', 1).orWhereJsonContains('options.languages', new Raw("'[\"en\"]'"));
     expect('select * from `users` where `id` = ? or json_contains(`options`, \'["en"]\', \'$."languages"\')').toBe(builder.toSql());
-    $this.assertEquals([1], builder.getBindings());
+    expect(builder.getBindings()).toBe([1]);
 })
 
 test('WhereJsonContainsPostgres', () =>
 {
-    const builder = $this.getPostgresBuilder();
+    const builder = getPostgresBuilder();
     builder.select(['*']).from('users').whereJsonContains('options', ['en']);
     expect('select * from "users" where ("options")::jsonb @> ?').toBe(builder.toSql());
     $this.assertEquals(['["en"]'], builder.getBindings());
 
-    builder = $this.getPostgresBuilder();
+    builder = getPostgresBuilder();
     builder.select(['*']).from('users').whereJsonContains('users.options.languages', ['en']);
     expect('select * from "users" where ("users"."options".\'languages\')::jsonb @> ?').toBe(builder.toSql());
     $this.assertEquals(['["en"]'], builder.getBindings());
 
-    builder = $this.getPostgresBuilder();
+    builder = getPostgresBuilder();
     builder.select(['*']).from('users').where('id', '=', 1).orWhereJsonContains('options.languages', new Raw("'[\"en\"]'"));
     expect('select * from "users" where "id" = ? or ("options".\'languages\')::jsonb @> \'["en"]\'').toBe(builder.toSql());
-    $this.assertEquals([1], builder.getBindings());
+    expect(builder.getBindings()).toBe([1]);
 })
 
 test('WhereJsonContainsSqlite', () =>
 {
     //$this.expectException(RuntimeException::class);
 
-    builder = $this.getSQLiteBuilder();
+    builder = getSQLiteBuilder();
     builder.select(['*']).from('users').whereJsonContains('options.languages', ['en']).toSql();
 })
 
 test('WhereJsonContainsSqlServer', () =>
 {
-    const builder = $this.getSqlServerBuilder();
+    const builder = getSqlServerBuilder();
     builder.select(['*']).from('users').whereJsonContains('options', true);
     expect('select * from [users] where ? in (select [value] from openjson([options]))').toBe(builder.toSql());
     $this.assertEquals(['true'], builder.getBindings());
 
-    builder = $this.getSqlServerBuilder();
+    builder = getSqlServerBuilder();
     builder.select(['*']).from('users').whereJsonContains('users.options.languages', 'en');
     expect('select * from [users] where ? in (select [value] from openjson([users].[options], \'$."languages"\'))').toBe(builder.toSql());
     $this.assertEquals(['en'], builder.getBindings());
 
-    builder = $this.getSqlServerBuilder();
+    builder = getSqlServerBuilder();
     builder.select(['*']).from('users').where('id', '=', 1).orWhereJsonContains('options.languages', new Raw("'en'"));
     expect('select * from [users] where [id] = ? or \'en\' in (select [value] from openjson([options], \'$."languages"\'))').toBe(builder.toSql());
-    $this.assertEquals([1], builder.getBindings());
+    expect(builder.getBindings()).toBe([1]);
 })
 
 test('WhereJsonDoesntContainMySql', () =>
 {
-    const builder = $this.getMysqlBuilder();
+    const builder = getMysqlBuilder();
     builder.select(['*']).from('users').whereJsonDoesntContain('options.languages', ['en']);
     expect('select * from `users` where not json_contains(`options`, ?, \'$."languages"\')').toBe(builder.toSql());
     $this.assertEquals(['["en"]'], builder.getBindings());
 
-    builder = $this.getMysqlBuilder();
+    builder = getMysqlBuilder();
     builder.select(['*']).from('users').where('id', '=', 1).orWhereJsonDoesntContain('options.languages', new Raw("'[\"en\"]'"));
     expect('select * from `users` where `id` = ? or not json_contains(`options`, \'["en"]\', \'$."languages"\')').toBe(builder.toSql());
-    $this.assertEquals([1], builder.getBindings());
+    expect(builder.getBindings()).toBe([1]);
 })
 
 test('WhereJsonDoesntContainPostgres', () =>
 {
-    const builder = $this.getPostgresBuilder();
+    const builder = getPostgresBuilder();
     builder.select(['*']).from('users').whereJsonDoesntContain('options.languages', ['en']);
     expect('select * from "users" where not ("options".\'languages\')::jsonb @> ?').toBe(builder.toSql());
     $this.assertEquals(['["en"]'], builder.getBindings());
 
-    builder = $this.getPostgresBuilder();
+    builder = getPostgresBuilder();
     builder.select(['*']).from('users').where('id', '=', 1).orWhereJsonDoesntContain('options.languages', new Raw("'[\"en\"]'"));
     expect('select * from "users" where "id" = ? or not ("options".\'languages\')::jsonb @> \'["en"]\'').toBe(builder.toSql());
-    $this.assertEquals([1], builder.getBindings());
+    expect(builder.getBindings()).toBe([1]);
 })
 
 test('WhereJsonDoesntContainSqlite', () =>
 {
     //$this.expectException(RuntimeException::class);
 
-    builder = $this.getSQLiteBuilder();
+    builder = getSQLiteBuilder();
     builder.select(['*']).from('users').whereJsonDoesntContain('options.languages', ['en']).toSql();
 })
 
 test('WhereJsonDoesntContainSqlServer', () =>
 {
-    const builder = $this.getSqlServerBuilder();
+    const builder = getSqlServerBuilder();
     builder.select(['*']).from('users').whereJsonDoesntContain('options.languages', 'en');
     expect('select * from [users] where not ? in (select [value] from openjson([options], \'$."languages"\'))').toBe(builder.toSql());
     $this.assertEquals(['en'], builder.getBindings());
 
-    builder = $this.getSqlServerBuilder();
+    builder = getSqlServerBuilder();
     builder.select(['*']).from('users').where('id', '=', 1).orWhereJsonDoesntContain('options.languages', new Raw("'en'"));
     expect('select * from [users] where [id] = ? or not \'en\' in (select [value] from openjson([options], \'$."languages"\'))').toBe(builder.toSql());
-    $this.assertEquals([1], builder.getBindings());
+    expect(builder.getBindings()).toBe([1]);
 })
 
 test('WhereJsonContainsKeyMySql', () =>
 {
-    const builder = $this.getMysqlBuilder();
+    const builder = getMysqlBuilder();
     builder.select(['*']).from('users').whereJsonContainsKey('users.options.languages');
     expect('select * from `users` where ifnull(json_contains_path(`users`.`options`, \'one\', \'$."languages"\'), 0)').toBe(builder.toSql());
 
-    builder = $this.getMysqlBuilder();
+    builder = getMysqlBuilder();
     builder.select(['*']).from('users').whereJsonContainsKey('options.language.primary');
     expect('select * from `users` where ifnull(json_contains_path(`options`, \'one\', \'$."language"."primary"\'), 0)').toBe(builder.toSql());
 
-    builder = $this.getMysqlBuilder();
+    builder = getMysqlBuilder();
     builder.select(['*']).from('users').where('id', '=', 1).orWhereJsonContainsKey('options.languages');
     expect('select * from `users` where `id` = ? or ifnull(json_contains_path(`options`, \'one\', \'$."languages"\'), 0)').toBe(builder.toSql());
 
-    builder = $this.getMysqlBuilder();
+    builder = getMysqlBuilder();
     builder.select(['*']).from('users').whereJsonContainsKey('options.languages[0][1]');
     expect('select * from `users` where ifnull(json_contains_path(`options`, \'one\', \'$."languages"[0][1]\'), 0)').toBe(builder.toSql());
 })
 
 test('WhereJsonContainsKeyPostgres', () =>
 {
-    const builder = $this.getPostgresBuilder();
+    const builder = getPostgresBuilder();
     builder.select(['*']).from('users').whereJsonContainsKey('users.options.languages');
     expect('select * from "users" where coalesce(("users"."options")::jsonb ?? \'languages\', false)').toBe(builder.toSql());
 
-    builder = $this.getPostgresBuilder();
+    builder = getPostgresBuilder();
     builder.select(['*']).from('users').whereJsonContainsKey('options.language.primary');
     expect('select * from "users" where coalesce(("options".\'language\')::jsonb ?? \'primary\', false)').toBe(builder.toSql());
 
-    builder = $this.getPostgresBuilder();
+    builder = getPostgresBuilder();
     builder.select(['*']).from('users').where('id', '=', 1).orWhereJsonContainsKey('options.languages');
     expect('select * from "users" where "id" = ? or coalesce(("options")::jsonb ?? \'languages\', false)').toBe(builder.toSql());
 
-    builder = $this.getPostgresBuilder();
+    builder = getPostgresBuilder();
     builder.select(['*']).from('users').whereJsonContainsKey('options.languages[0][1]');
     expect('select * from "users" where case when jsonb_typeof(("options".\'languages\'.0)::jsonb) = \'array\' then jsonb_array_length(("options".\'languages\'.0)::jsonb) >= 2 else false end').toBe(builder.toSql());
 
-    builder = $this.getPostgresBuilder();
+    builder = getPostgresBuilder();
     builder.select(['*']).from('users').whereJsonContainsKey('options.languages[-1]');
     expect('select * from "users" where case when jsonb_typeof(("options".\'languages\')::jsonb) = \'array\' then jsonb_array_length(("options".\'languages\')::jsonb) >= 1 else false end').toBe(builder.toSql());
 })
 
 test('WhereJsonContainsKeySqlite', () =>
 {
-    const builder = $this.getSQLiteBuilder();
+    const builder = getSQLiteBuilder();
     builder.select(['*']).from('users').whereJsonContainsKey('users.options.languages');
     expect('select * from "users" where json_type("users"."options", \'$."languages"\') is not null').toBe(builder.toSql());
 
-    builder = $this.getSQLiteBuilder();
+    builder = getSQLiteBuilder();
     builder.select(['*']).from('users').whereJsonContainsKey('options.language.primary');
     expect('select * from "users" where json_type("options", \'$."language"."primary"\') is not null').toBe(builder.toSql());
 
-    builder = $this.getSQLiteBuilder();
+    builder = getSQLiteBuilder();
     builder.select(['*']).from('users').where('id', '=', 1).orWhereJsonContainsKey('options.languages');
     expect('select * from "users" where "id" = ? or json_type("options", \'$."languages"\') is not null').toBe(builder.toSql());
 
-    builder = $this.getSQLiteBuilder();
+    builder = getSQLiteBuilder();
     builder.select(['*']).from('users').whereJsonContainsKey('options.languages[0][1]');
     expect('select * from "users" where json_type("options", \'$."languages"[0][1]\') is not null').toBe(builder.toSql());
 })
 
 test('WhereJsonContainsKeySqlServer', () =>
 {
-    const builder = $this.getSqlServerBuilder();
+    const builder = getSqlServerBuilder();
     builder.select(['*']).from('users').whereJsonContainsKey('users.options.languages');
     expect('select * from [users] where \'languages\' in (select [key] from openjson([users].[options]))').toBe(builder.toSql());
 
-    builder = $this.getSqlServerBuilder();
+    builder = getSqlServerBuilder();
     builder.select(['*']).from('users').whereJsonContainsKey('options.language.primary');
     expect('select * from [users] where \'primary\' in (select [key] from openjson([options], \'$."language"\'))').toBe(builder.toSql());
 
-    builder = $this.getSqlServerBuilder();
+    builder = getSqlServerBuilder();
     builder.select(['*']).from('users').where('id', '=', 1).orWhereJsonContainsKey('options.languages');
     expect('select * from [users] where [id] = ? or \'languages\' in (select [key] from openjson([options]))').toBe(builder.toSql());
 
-    builder = $this.getSqlServerBuilder();
+    builder = getSqlServerBuilder();
     builder.select(['*']).from('users').whereJsonContainsKey('options.languages[0][1]');
     expect('select * from [users] where 1 in (select [key] from openjson([options], \'$."languages"[0]\'))').toBe(builder.toSql());
 })
 
 test('WhereJsonDoesntContainKeyMySql', () =>
 {
-    const builder = $this.getMysqlBuilder();
+    const builder = getMysqlBuilder();
     builder.select(['*']).from('users').whereJsonDoesntContainKey('options.languages');
     expect('select * from `users` where not ifnull(json_contains_path(`options`, \'one\', \'$."languages"\'), 0)').toBe(builder.toSql());
 
-    builder = $this.getMysqlBuilder();
+    builder = getMysqlBuilder();
     builder.select(['*']).from('users').where('id', '=', 1).orWhereJsonDoesntContainKey('options.languages');
     expect('select * from `users` where `id` = ? or not ifnull(json_contains_path(`options`, \'one\', \'$."languages"\'), 0)').toBe(builder.toSql());
 
-    builder = $this.getMysqlBuilder();
+    builder = getMysqlBuilder();
     builder.select(['*']).from('users').whereJsonDoesntContainKey('options.languages[0][1]');
     expect('select * from `users` where not ifnull(json_contains_path(`options`, \'one\', \'$."languages"[0][1]\'), 0)').toBe(builder.toSql());
 })
 
 test('WhereJsonDoesntContainKeyPostgres', () =>
 {
-    const builder = $this.getPostgresBuilder();
+    const builder = getPostgresBuilder();
     builder.select(['*']).from('users').whereJsonDoesntContainKey('options.languages');
     expect('select * from "users" where not coalesce(("options")::jsonb ?? \'languages\', false)').toBe(builder.toSql());
 
-    builder = $this.getPostgresBuilder();
+    builder = getPostgresBuilder();
     builder.select(['*']).from('users').where('id', '=', 1).orWhereJsonDoesntContainKey('options.languages');
     expect('select * from "users" where "id" = ? or not coalesce(("options")::jsonb ?? \'languages\', false)').toBe(builder.toSql());
 
-    builder = $this.getPostgresBuilder();
+    builder = getPostgresBuilder();
     builder.select(['*']).from('users').whereJsonDoesntContainKey('options.languages[0][1]');
     expect('select * from "users" where not case when jsonb_typeof(("options".\'languages\'.0)::jsonb) = \'array\' then jsonb_array_length(("options".\'languages\'.0)::jsonb) >= 2 else false end').toBe(builder.toSql());
 
-    builder = $this.getPostgresBuilder();
+    builder = getPostgresBuilder();
     builder.select(['*']).from('users').whereJsonDoesntContainKey('options.languages[-1]');
     expect('select * from "users" where not case when jsonb_typeof(("options".\'languages\')::jsonb) = \'array\' then jsonb_array_length(("options".\'languages\')::jsonb) >= 1 else false end').toBe(builder.toSql());
 })
 
 test('WhereJsonDoesntContainKeySqlite', () =>
 {
-    const builder = $this.getSQLiteBuilder();
+    const builder = getSQLiteBuilder();
     builder.select(['*']).from('users').whereJsonDoesntContainKey('options.languages');
     expect('select * from "users" where not json_type("options", \'$."languages"\') is not null').toBe(builder.toSql());
 
-    builder = $this.getSQLiteBuilder();
+    builder = getSQLiteBuilder();
     builder.select(['*']).from('users').where('id', '=', 1).orWhereJsonDoesntContainKey('options.languages');
     expect('select * from "users" where "id" = ? or not json_type("options", \'$."languages"\') is not null').toBe(builder.toSql());
 
-    builder = $this.getSQLiteBuilder();
+    builder = getSQLiteBuilder();
     builder.select(['*']).from('users').where('id', '=', 1).orWhereJsonDoesntContainKey('options.languages[0][1]');
     expect('select * from "users" where "id" = ? or not json_type("options", \'$."languages"[0][1]\') is not null').toBe(builder.toSql());
 })
 
 test('WhereJsonDoesntContainKeySqlServer', () =>
 {
-    const builder = $this.getSqlServerBuilder();
+    const builder = getSqlServerBuilder();
     builder.select(['*']).from('users').whereJsonDoesntContainKey('options.languages');
     expect('select * from [users] where not \'languages\' in (select [key] from openjson([options]))').toBe(builder.toSql());
 
-    builder = $this.getSqlServerBuilder();
+    builder = getSqlServerBuilder();
     builder.select(['*']).from('users').where('id', '=', 1).orWhereJsonDoesntContainKey('options.languages');
     expect('select * from [users] where [id] = ? or not \'languages\' in (select [key] from openjson([options]))').toBe(builder.toSql());
 
-    builder = $this.getSqlServerBuilder();
+    builder = getSqlServerBuilder();
     builder.select(['*']).from('users').where('id', '=', 1).orWhereJsonDoesntContainKey('options.languages[0][1]');
     expect('select * from [users] where [id] = ? or not 1 in (select [key] from openjson([options], \'$."languages"[0]\'))').toBe(builder.toSql());
 })
 
 test('WhereJsonLengthMySql', () =>
 {
-    const builder = $this.getMysqlBuilder();
+    const builder = getMysqlBuilder();
     builder.select(['*']).from('users').whereJsonLength('options', 0);
     expect('select * from `users` where json_length(`options`) = ?').toBe(builder.toSql());
-    $this.assertEquals([0], builder.getBindings());
+    expect(builder.getBindings()).toBe([0]);
 
-    builder = $this.getMysqlBuilder();
+    builder = getMysqlBuilder();
     builder.select(['*']).from('users').whereJsonLength('users.options.languages', '>', 0);
     expect('select * from `users` where json_length(`users`.`options`, \'$."languages"\') > ?').toBe(builder.toSql());
-    $this.assertEquals([0], builder.getBindings());
+    expect(builder.getBindings()).toBe([0]);
 
-    builder = $this.getMysqlBuilder();
+    builder = getMysqlBuilder();
     builder.select(['*']).from('users').where('id', '=', 1).orWhereJsonLength('options.languages', new Raw('0'));
     expect('select * from `users` where `id` = ? or json_length(`options`, \'$."languages"\') = 0').toBe(builder.toSql());
-    $this.assertEquals([1], builder.getBindings());
+    expect(builder.getBindings()).toBe([1]);
 
-    builder = $this.getMysqlBuilder();
+    builder = getMysqlBuilder();
     builder.select(['*']).from('users').where('id', '=', 1).orWhereJsonLength('options.languages', '>', new Raw('0'));
     expect('select * from `users` where `id` = ? or json_length(`options`, \'$."languages"\') > 0').toBe(builder.toSql());
-    $this.assertEquals([1], builder.getBindings());
+    expect(builder.getBindings()).toBe([1]);
 })
 
 test('WhereJsonLengthPostgres', () =>
 {
-    const builder = $this.getPostgresBuilder();
+    const builder = getPostgresBuilder();
     builder.select(['*']).from('users').whereJsonLength('options', 0);
     expect('select * from "users" where jsonb_array_length(("options")::jsonb) = ?').toBe(builder.toSql());
-    $this.assertEquals([0], builder.getBindings());
+    expect(builder.getBindings()).toBe([0]);
 
-    builder = $this.getPostgresBuilder();
+    builder = getPostgresBuilder();
     builder.select(['*']).from('users').whereJsonLength('users.options.languages', '>', 0);
     expect('select * from "users" where jsonb_array_length(("users"."options".\'languages\')::jsonb) > ?').toBe(builder.toSql());
-    $this.assertEquals([0], builder.getBindings());
+    expect(builder.getBindings()).toBe([0]);
 
-    builder = $this.getPostgresBuilder();
+    builder = getPostgresBuilder();
     builder.select(['*']).from('users').where('id', '=', 1).orWhereJsonLength('options.languages', new Raw('0'));
     expect('select * from "users" where "id" = ? or jsonb_array_length(("options".\'languages\')::jsonb) = 0').toBe(builder.toSql());
-    $this.assertEquals([1], builder.getBindings());
+    expect(builder.getBindings()).toBe([1]);
 
-    builder = $this.getPostgresBuilder();
+    builder = getPostgresBuilder();
     builder.select(['*']).from('users').where('id', '=', 1).orWhereJsonLength('options.languages', '>', new Raw('0'));
     expect('select * from "users" where "id" = ? or jsonb_array_length(("options".\'languages\')::jsonb) > 0').toBe(builder.toSql());
-    $this.assertEquals([1], builder.getBindings());
+    expect(builder.getBindings()).toBe([1]);
 })
 
 test('WhereJsonLengthSqlite', () =>
 {
-    const builder = $this.getSQLiteBuilder();
+    const builder = getSQLiteBuilder();
     builder.select(['*']).from('users').whereJsonLength('options', 0);
     expect('select * from "users" where json_array_length("options") = ?').toBe(builder.toSql());
-    $this.assertEquals([0], builder.getBindings());
+    expect(builder.getBindings()).toBe([0]);
 
-    builder = $this.getSQLiteBuilder();
+    builder = getSQLiteBuilder();
     builder.select(['*']).from('users').whereJsonLength('users.options.languages', '>', 0);
     expect('select * from "users" where json_array_length("users"."options", \'$."languages"\') > ?').toBe(builder.toSql());
-    $this.assertEquals([0], builder.getBindings());
+    expect(builder.getBindings()).toBe([0]);
 
-    builder = $this.getSQLiteBuilder();
+    builder = getSQLiteBuilder();
     builder.select(['*']).from('users').where('id', '=', 1).orWhereJsonLength('options.languages', new Raw('0'));
     expect('select * from "users" where "id" = ? or json_array_length("options", \'$."languages"\') = 0').toBe(builder.toSql());
-    $this.assertEquals([1], builder.getBindings());
+    expect(builder.getBindings()).toBe([1]);
 
-    builder = $this.getSQLiteBuilder();
+    builder = getSQLiteBuilder();
     builder.select(['*']).from('users').where('id', '=', 1).orWhereJsonLength('options.languages', '>', new Raw('0'));
     expect('select * from "users" where "id" = ? or json_array_length("options", \'$."languages"\') > 0').toBe(builder.toSql());
-    $this.assertEquals([1], builder.getBindings());
+    expect(builder.getBindings()).toBe([1]);
 })
 
 test('WhereJsonLengthSqlServer', () =>
 {
-    const builder = $this.getSqlServerBuilder();
+    const builder = getSqlServerBuilder();
     builder.select(['*']).from('users').whereJsonLength('options', 0);
     expect('select * from [users] where (select count(*) from openjson([options])) = ?').toBe(builder.toSql());
-    $this.assertEquals([0], builder.getBindings());
+    expect(builder.getBindings()).toBe([0]);
 
-    builder = $this.getSqlServerBuilder();
+    builder = getSqlServerBuilder();
     builder.select(['*']).from('users').whereJsonLength('users.options.languages', '>', 0);
     expect('select * from [users] where (select count(*) from openjson([users].[options], \'$."languages"\')) > ?').toBe(builder.toSql());
-    $this.assertEquals([0], builder.getBindings());
+    expect(builder.getBindings()).toBe([0]);
 
-    builder = $this.getSqlServerBuilder();
+    builder = getSqlServerBuilder();
     builder.select(['*']).from('users').where('id', '=', 1).orWhereJsonLength('options.languages', new Raw('0'));
     expect('select * from [users] where [id] = ? or (select count(*) from openjson([options], \'$."languages"\')) = 0').toBe(builder.toSql());
-    $this.assertEquals([1], builder.getBindings());
+    expect(builder.getBindings()).toBe([1]);
 
-    builder = $this.getSqlServerBuilder();
+    builder = getSqlServerBuilder();
     builder.select(['*']).from('users').where('id', '=', 1).orWhereJsonLength('options.languages', '>', new Raw('0'));
     expect('select * from [users] where [id] = ? or (select count(*) from openjson([options], \'$."languages"\')) > 0').toBe(builder.toSql());
-    $this.assertEquals([1], builder.getBindings());
+    expect(builder.getBindings()).toBe([1]);
 })
 
 test('From', () =>
@@ -5659,7 +5689,7 @@ test('FromRaw', () =>
 
 test('FromRawOnSqlServer', () =>
 {
-    const builder = $this.getSqlServerBuilder();
+    const builder = getSqlServerBuilder();
     builder.fromRaw('dbo.[SomeNameWithRoundBrackets (test)]');
     expect('select * from dbo.[SomeNameWithRoundBrackets (test)]').toBe(builder.toSql());
 })
@@ -5674,78 +5704,78 @@ test('FromRawWithWhereOnTheMainQuery', () =>
 
 test('FromQuestionMarkOperatorOnPostgres', () =>
 {
-    const builder = $this.getPostgresBuilder();
+    let builder = getPostgresBuilder();
     builder.select(['*']).from('users').where('roles', '?', 'superuser');
     expect('select * from "users" where "roles" ?? ?').toBe(builder.toSql());
 
-    builder = $this.getPostgresBuilder();
+    builder = getPostgresBuilder();
     builder.select(['*']).from('users').where('roles', '?|', 'superuser');
     expect('select * from "users" where "roles" ??| ?').toBe(builder.toSql());
 
-    builder = $this.getPostgresBuilder();
+    builder = getPostgresBuilder();
     builder.select(['*']).from('users').where('roles', '?&', 'superuser');
     expect('select * from "users" where "roles" ??& ?').toBe(builder.toSql());
 })
 
 test('UseIndexMySql', () =>
 {
-    const builder = $this.getMysqlBuilder();
+    const builder = getMysqlBuilder();
     builder.select('foo').from('users').useIndex('test_index');
     expect('select `foo` from `users` use index (test_index)').toBe(builder.toSql());
 })
 
 test('ForceIndexMySql', () =>
 {
-    const builder = $this.getMysqlBuilder();
+    const builder = getMysqlBuilder();
     builder.select('foo').from('users').forceIndex('test_index');
     expect('select `foo` from `users` force index (test_index)').toBe(builder.toSql());
 })
 
 test('IgnoreIndexMySql', () =>
 {
-    const builder = $this.getMysqlBuilder();
+    const builder = getMysqlBuilder();
     builder.select('foo').from('users').ignoreIndex('test_index');
     expect('select `foo` from `users` ignore index (test_index)').toBe(builder.toSql());
 })
 
 test('UseIndexSqlite', () =>
 {
-    builder = $this.getSQLiteBuilder();
+    builder = getSQLiteBuilder();
     builder.select('foo').from('users').useIndex('test_index');
     expect('select "foo" from "users"').toBe(builder.toSql());
 })
 
 test('ForceIndexSqlite', () =>
 {
-    builder = $this.getSQLiteBuilder();
+    const builder = getSQLiteBuilder();
     builder.select('foo').from('users').forceIndex('test_index');
     expect('select "foo" from "users" indexed by test_index').toBe(builder.toSql());
 })
 
 test('IgnoreIndexSqlite', () =>
 {
-    builder = $this.getSQLiteBuilder();
+    const builder = getSQLiteBuilder();
     builder.select('foo').from('users').ignoreIndex('test_index');
     expect('select "foo" from "users"').toBe(builder.toSql());
 })
 
 test('UseIndexSqlServer', () =>
 {
-    const builder = $this.getSqlServerBuilder();
+    const builder = getSqlServerBuilder();
     builder.select('foo').from('users').useIndex('test_index');
     expect('select [foo] from [users]').toBe(builder.toSql());
 })
 
 test('ForceIndexSqlServer', () =>
 {
-    const builder = $this.getSqlServerBuilder();
+    const builder = getSqlServerBuilder();
     builder.select('foo').from('users').forceIndex('test_index');
     expect('select [foo] from [users] with (index(test_index))').toBe(builder.toSql());
 })
 
 test('IgnoreIndexSqlServer', () =>
 {
-    const builder = $this.getSqlServerBuilder();
+    const builder = getSqlServerBuilder();
     builder.select('foo').from('users').ignoreIndex('test_index');
     expect('select [foo] from [users]').toBe(builder.toSql());
 })
@@ -5754,34 +5784,34 @@ test('Clone', () =>
 {
     const builder = getBuilder();
     builder.select(['*']).from('users');
-    $clone = builder.clone().where('email', 'foo');
+    const clone = builder.clone().where('email', 'foo');
 
-    $this.assertNotSame(builder, $clone);
-    expect('select * from "users"').toBe(builder.toSql());
-    expect('select * from "users" where "email" = ?', $clone.toSql());
+    expect(clone).not.toBe(builder);
+    expect(builder.toSql()).toBe('select * from "users"');
+    expect(clone.toSql()).toBe('select * from "users" where "email" = ?');
 })
 
 test('CloneWithout', () =>
 {
     const builder = getBuilder();
     builder.select(['*']).from('users').where('email', 'foo').orderBy('email');
-    $clone = builder.cloneWithout(['orders']);
+    const clone = builder.cloneWithout(['orders']);
 
-    expect('select * from "users" where "email" = ? order by "email" asc').toBe(builder.toSql());
-    expect('select * from "users" where "email" = ?', $clone.toSql());
+    expect(builder.toSql()).toBe('select * from "users" where "email" = ? order by "email" asc');
+    expect(clone.toSql()).toBe('select * from "users" where "email" = ?');
 })
 
 test('CloneWithoutBindings', () =>
 {
     const builder = getBuilder();
     builder.select(['*']).from('users').where('email', 'foo').orderBy('email');
-    $clone = builder.cloneWithout(['wheres']).cloneWithoutBindings(['where']);
+    const clone = builder.cloneWithout(['wheres']).cloneWithoutBindings(['where']);
 
-    expect('select * from "users" where "email" = ? order by "email" asc').toBe(builder.toSql());
-    $this.assertEquals(['foo'], builder.getBindings());
+    expect(builder.toSql()).toBe('select * from "users" where "email" = ? order by "email" asc');
+    expect(builder.getBindings()).toBe(['foo']);
 
-    expect('select * from "users" order by "email" asc', $clone.toSql());
-    $this.assertEquals([], $clone.getBindings());
+    expect(clone.toSql()).toBe('select * from "users" order by "email" asc');
+    expect(clone.getBindings()).toBe([]);
 })
 
 test('ToRawSql', () =>

@@ -1,0 +1,35 @@
+{
+  "name": "@genius257/database.ts",
+  "version": "1.0.0",
+  "description": "TypeScript inspired solution of the Laravel Illuminate/Database package",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "test": "jest"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/genius257/database.ts.git"
+  },
+  "keywords": [
+    "laravel",
+    "database",
+    "query",
+    "ORM"
+  ],
+  "author": "Anders Pedersen",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/genius257/database.ts/issues"
+  },
+  "homepage": "https://github.com/genius257/database.ts#readme",
+  "dependencies": {
+    "typescript": "^5.1.6"
+  },
+  "devDependencies": {
+    "@typescript-eslint/eslint-plugin": "^6.4.0",
+    "@typescript-eslint/parser": "^6.4.0",
+    "eslint": "^8.47.0"
+  }
+}

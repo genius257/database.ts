@@ -1,9 +1,9 @@
-import { SqlValue } from "sql.js";
 import Relation from "../Eloquent/Relations/Relation";
 import Expression from "./Expression";
 import type Grammar from "./Grammars/Grammar";
 import IndexHint from "./IndexHint";
 
+type SqlValue = number | string | Uint8Array | null;
 type Value = SqlValue;
 
 type BindingKey = 'select'

@@ -934,7 +934,7 @@ export class Builder<T extends Record<string, any> = Record<string, any>> {
         return this.where(column, operator, value, 'or');
     }
 
-    public orWhereNot(column: Function|string|unknown[]|Expression, operator: unknown = null, value: unknown = null): this {
+    public orWhereNot(column: ((query: Builder) => void)|string|unknown[]|Expression, operator: unknown = null, value: unknown = null): this {
         return this.whereNot(column, operator, value, 'or');
     }
 

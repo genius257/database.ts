@@ -777,10 +777,10 @@ export class Builder<T extends Record<string, any> = Record<string, any>> {
         return this.limit(value);
     }
 
-    public limit(value: number): this {
+    public limit(value: number|null): this {
         const property = this._unions.length > 0 ? 'unionLimit' : 'limit' as const;
 
-        if (value >= 0) {
+        if (value === null || value >= 0) {
             this[`_${property}`] = value !== null ? Math.round(value) : undefined;
         }
 

@@ -340,7 +340,7 @@ export class Builder<T extends Record<string, any> = Record<string, any>> {
         return this;
     }
 
-    public addBinding(value: Value|Array<Value|BackedEnum>, type: keyof Builder<T>["_bindings"] = "where"): this {
+    public addBinding<K extends keyof Builder<T>["_bindings"] = "where", V extends Builder<T>["_bindings"][K] = Builder<T>["_bindings"][K]>(value: V, type: K = "where"): this {
         if (Array.isArray(value)) {
             this._bindings[type] = [...this._bindings[type], ...value]
                 .map(value => this.castBinding(value));

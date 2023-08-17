@@ -37,7 +37,7 @@ export default abstract class Grammar {
         return segments.map((value, index) => (index === 0 && segments.length > 1) ? this.wrapTable(value) : this.wrapValue(value)).join('.');
     }
     
-    public wrapValue(value: string): string {
+    protected wrapValue(value: string): string {
         return value === "*" ? value : `"${value.replace(/"/g, '""')}"`;
     }
 

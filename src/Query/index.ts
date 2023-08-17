@@ -1103,7 +1103,7 @@ export class Builder<T extends Record<string, any> = Record<string, any>> {
     }
 
     public offset(value: number): this {
-        const property: keyof this = this._unions.length > 0 ? '_unionOffset' : '_offset';
+        const property = this._unions.length > 0 ? '_unionOffset' : '_offset';
 
         this[property] = Math.max(0, Number.parseInt(value));
 

@@ -938,7 +938,7 @@ export class Builder<T extends Record<string, any> = Record<string, any>> {
         return this.whereNot(column, operator, value, 'or');
     }
 
-    public whereNot(column: Function|string|unknown[]|Expression, operator: unknown = null, value: unknown = null, boolean: string = 'and'): this {
+    public whereNot(column: ((query: Builder)=>void)|string|unknown[]|Expression, operator: unknown = null, value: unknown = null, boolean: string = 'and'): this {
         if (Array.isArray(column)) {
             return this.whereNested((query: Builder) => query.where(column, operator, value, boolean), `${boolean} not`);
         }

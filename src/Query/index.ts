@@ -356,7 +356,7 @@ export class Builder<T extends Record<string, any> = Record<string, any>> {
         return this.grammar.compileSelect(this);
     }
 
-    protected createSub(query: Function | Builder | string): unknown[] {
+    protected createSub(query: ((query: Builder) => void) | Builder | string): unknown[] {
         if (typeof query === "function") {
             const callback = query;
 

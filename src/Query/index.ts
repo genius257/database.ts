@@ -486,6 +486,18 @@ export class Builder<T extends Record<string, any> = Record<string, any>> {
         return this;
     }
 
+    public orWhereNull(column: string|unknown[]|Expression): this {
+        return this.whereNull(column, 'or');
+    }
+
+    public whereNotNull(columns: string|unknown[]|Expression, boolean: string = 'and'): this {
+        return this.whereNull(columns, boolean, true);
+    }
+
+    public orWhereNotNull(column: Expression|string): this {
+        return this.whereNotNull(column, 'or');
+    }
+
     protected isBitwiseOperator(operator): boolean {
         return this._bitwiseOperators.includes(operator.toLowerCase())
             || this.grammar.getBitwiseOperators().includes(operator.toLowerCase());
@@ -703,6 +715,47 @@ export class Builder<T extends Record<string, any> = Record<string, any>> {
         return this;
     }
 
+    public orWhereIn(column: Expression|string, values: unknown): this {
+        return this.whereIn(column, values, 'or');
+    }
+
+    public whereNotIn(column: Expression|string, values: unknown, boolean: string = 'and'): this {
+        return this.whereIn(column, values, boolean, true);
+    }
+
+    public orWhereNotIn(column: Expression|string, values: unknown): this {
+        return this.whereNotIn(column, values, 'or');
+    }
+
+    public whereIntegerInRaw(column: string, values: unknown[], boolean: string = 'and', not: boolean = false): this {
+        const type: Where['type'] = not ? 'NotInRaw' : 'InRaw';
+
+        values = values.flat();
+
+        values = values.map(value => Number.parseInt(value));
+
+        this._wheres.push({
+            type,
+            column,
+            values,
+            boolean
+        });
+
+        return this;
+    }
+
+    public orWhereIntegerInRaw(column: string, values: unknown[]): this {
+        return this.whereIntegerInRaw(column, values, 'or');
+    }
+
+    public whereIntegerNotInRaw(column: string, values: unknown[], boolean: string = 'and'): this {
+        return this.whereIntegerInRaw(column, values, boolean, true);
+    }
+
+    public orWhereIntegerNotInRaw(column: string, values: unknown[]): this {
+        return this.whereIntegerNotInRaw(column, values, 'or');
+    }
+
     public cleanBindings(bindings: Array<SqlValue | Expression>): Array<SqlValue> {
         return bindings
             .filter((binding): binding is Exclude<typeof binding, Expression> => !(binding instanceof Expression)) //WARNING: Source uses reject method from the collection class, acts as an inverted fitler method, so i inverted the conditional in JS. See soruce: https://github.com/laravel/framework/blob/5a7f2b4742b3dc7ce43acc698f400a9395801c7b/src/Illuminate/Database/Query/Builder.php#L3775
@@ -891,6 +944,270 @@ export class Builder<T extends Record<string, any> = Record<string, any>> {
         }
 
         return this.where(column, operator, value, `${boolean} not`);
+    }
+
+    public whereDate(column: Expression|string, operator: string, value: Date|string|null = null, boolean: string = 'and'): this {
+        [value, operator] = this.prepareValueAndOperator(value, operator, arguments.length === 2);
+
+        value = this.flattenValue(value);
+
+        if (value instanceof Date) {
+            //value = value.format('Y-m-d'); //FIXME: A Date formatter helper should be found or made.
+            value = `${value.getFullYear()} ${value.getMonth().toString().padStart(2, '0')} ${value.getDate().toString().padStart(2, '0')}`;
+        }
+
+        this.addDateBasedWhere('Date', column, operator, value, boolean);
+    }
+
+    public orWhereDate(column: Expression|string, operator: string, value: Date|string|null = null): this {
+        [value, operator] = this.prepareValueAndOperator(value, operator, arguments.length === 2);
+
+        return this.whereDate(column, operator, value, 'or');
+    }
+
+    public whereDay(column: Expression|string, operator: string, value: Date|string|number|null = null, boolean: string = 'and'): this {
+        [value, operator] = this.prepareValueAndOperator(value, operator, arguments.length === 2);
+
+        value = this.flattenValue(value);
+
+        if (value instanceof Date) {
+            value = value.format('d');
+        }
+
+        if (!(value instanceof Expression)) {
+            value = value.toString().padStart(2, '0');
+        }
+
+        return this.addDateBasedWhere('Day', column, operator, value, boolean);
+    }
+
+    public orWhereDay(column: Expression|string, operator: string, value: Date|string|number|null = null): this {
+        [value, operator] = this.prepareValueAndOperator(value, operator, arguments.length === 2);
+
+        return this.whereDay(column, operator, value, 'or');
+    }
+
+    public whereMonth(column: Expression|string, operator: string, value: Date|string|number|null = null, boolean: sting = 'and'): this {
+        [value, operator] = this.prepareValueAndOperator(value, operator, arguments.length === 2);
+
+        value = this.flattenValue(value);
+
+        if (value instanceof Date) {
+            value = value.format('m');
+        }
+
+        if (!(value instanceof Expression)) {
+            value = value.toString().padStart(2, '0');
+        }
+
+        return this.addDateBasedWhere('Month', column, operator, value, boolean);
+    }
+
+    public orWhereMonth(column: Expression|string, operator: string, value: Date|string|number|null = null): this {
+        [value, operator] = this.prepareValueAndOperator(value, operator, arguments.length === 2);
+
+        return this.whereMonth(column, operator, value, 'or');
+    }
+
+    public whereYear(column: Expression|string, operator: string, value: Date|string|number|null = null, boolean: string = 'and'): this {
+        [value, operator] = this.prepareValueAndOperator(value, operator, arguments.length === 2);
+
+        value = this.flattenValue(value);
+
+        if (value instanceof Date) {
+            value.format('Y');
+        }
+
+        return this.addDateBasedWhere('Year', column, operator, value, boolean)
+    }
+
+    public orWhereYear(column: Expression|string, operator: string, value: Date|string|number|null = null): this {
+        [value, operator] = this.prepareValueAndOperator(value, operator, arguments.length === 2);
+
+        return this.whereYear(column, operator, value, 'or');
+    }
+
+    protected addDateBasedWhere(type: 'Date'|'Day'|'Month'|'Year', column: Expression|string, operator: string, value: unknown, boolean: string = 'and'): this {
+        typeof type satisfies Where['type'];//FIXME: validate that type extends Where['type']
+        this._wheres.push({
+            column,
+            type,
+            boolean,
+            operator,
+            value
+        });
+
+        if (!(value instanceof Expression)) {
+            this.addBinding(value, 'where');
+        }
+
+        return this;
+    }
+
+    public whereRaw(sql: string, bindings: unknown[] = [], boolean: string = 'and'): this {
+        this._wheres.push({
+            type: 'raw',
+            sql,
+            boolean
+        });
+
+        this.addBinding(bindings, 'where');
+    }
+
+    public orWhereRaw(sql: string, bindings: unknown[]): this {
+        return this.whereRaw(sql, bindings, 'or');
+    }
+
+    public orWhereColumn(first: keyof T, operator: string|null = null, second: string|null = null): this {
+        return this.where(first, operator, second, 'or');
+    }
+
+    public union(query: Builder|Function, all: boolean = false): this {
+        if (typeof query === "function") {
+            query(query = this.newQuery());
+        }
+
+        this._unions.push({
+            query,
+            all
+        });
+
+        this.addBinding(query.addBinding(), 'union');
+    }
+
+    public unionAll(query: Builder): this {
+        this.union(query, true);
+    }
+
+    public orderBy(column: Builder|Expression|string, direction: 'asc'|'desc' = 'asc'): this {
+        if (this.isQueryable(column)) {
+            const [query, bindings] = this.createSub(column);
+
+            column = new Expression(`(${query})`);
+
+            this.addBinding(bindings, this._unions.length > 0 ? 'unionOrder' : 'order');
+        }
+
+        direction = direction.toLowerCase();
+
+        this[this._unions.length > 0 ? '_unionOrders' : '_orders'].push({
+            column,
+            direction,
+        });
+
+        return this;
+    }
+
+    public skip(value: number): this {
+        return this.offset(value);
+    }
+
+    public offset(value: number): this {
+        const property: keyof this = this._unions.length > 0 ? '_unionOffset' : '_offset';
+
+        this[property] = Math.max(0, Number.parseInt(value));
+
+        return this;
+    }
+
+    //TODO: should this method require only one parameter of type array with valid types?
+    public groupBy(...groups: Array<Expression|string|unknown[]>): this {
+        groups.forEach(group => {
+            this._groups = [...this._groups, ...Array.isArray(group) ? group : [group]]
+        });
+
+        return this;
+    }
+
+    public groupByRaw(sql: string, bindings: unknown[]): this {
+        this._groups.push(new Expression(sql));
+
+        this.addBinding(bindings, 'groupBy');
+
+        return this;
+    }
+
+    public orderByDesc(column: Function|Builder|Expression|string): this {
+        return this.orderBy(column, 'desc');
+    }
+
+    public latest(column: string = 'created_at'): this {
+        return this.orderBy(column, 'desc');
+    }
+
+    public oldest(column: string = 'created_at'): this {
+        return this.orderBy(column, 'asc');
+    }
+
+    public inRandomOrder(seed: string = ''): this {
+        return this.orderByRaw(this.grammar.compileRandom(seed));
+    }
+
+    public orderByRaw(sql: string, bindings: unknown[]): this {
+        const type: Order['type'] = 'Raw';
+
+        this[this._unions.length > 0 ? '_unionOrders' : '_orders'].push({
+            type,
+            sql,
+        });
+
+        this.addBinding(bindings, this._unions.length > 0 ? 'unionOrder' : 'order');
+
+        return this;
+    }
+
+    public reorder(column: Function|Builder|Expression|string|null = null, direction: string = 'asc'): this {
+        this._orders = [];
+        this._unionOrders = [];
+        this._bindings.order = [];
+        this._bindings.unionOrder = [];
+
+        if (column) {
+            return this.orderBy(column, direction);
+        }
+
+        return this;
+    }
+
+    public orHaving(column: Expression|Function|string, operator: string|number|null = null, value: string|number|null = null): this {
+        [value, operator] = this.prepareValueAndOperator(value, operator, arguments.length === 2);
+
+        return this.having(column, operator, value, 'or');
+    }
+
+    public orHavingNull(column: string): this {
+        return this.havingNull(column, 'or');
+    }
+
+    public havingNotNull(column: string|unknown[], boolean: string = 'and'): this {
+        return this.havingNull(column, boolean, true);
+    }
+
+    public orHavingNotNull(column: string): this {
+        return this.havingNotNull(column, 'or');
+    }
+
+    public orHavingRaw(sql: string, bindings: unknown[] = []): this {
+        return this.havingRaw(sql, bindings, 'or');
+    }
+
+    public leftJoin(table: Expression|string, first: Function|string, operator: string|null = null, second: string|null = null): this {
+        return this.join(table, first, operator, second, 'left');
+    }
+
+    public forPage(page: number, perPage: number): this {
+        return this.offset((page - 1) * perPage).limit(perPage);
+    }
+
+    public joinSub(query: Function|Builder|string, as: string, first: Function|string, operator: string|null = null, second: string|null = null, type: string = 'inner', where: boolean = false): this {
+        let bindings;
+        [query, bindings] = this.createSub(query);
+
+        const expression = `(${query}) as ${this.grammar.wrapTable(as)}`;
+
+        this.addBinding(bindings, 'join');
+
+        return this.join(new Expression(expression), first, operator, second, type, where);
     }
 }
 

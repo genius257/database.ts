@@ -1191,7 +1191,7 @@ export class Builder<T extends Record<string, any> = Record<string, any>> {
         return this.havingRaw(sql, bindings, 'or');
     }
 
-    public leftJoin(table: Expression|string, first: Function|string, operator: string|null = null, second: string|null = null): this {
+    public leftJoin(table: Expression|string, first: ((query: JoinClause) => void)|string, operator: string|null = null, second: string|null = null): this {
         return this.join(table, first, operator, second, 'left');
     }
 

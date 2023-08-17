@@ -1199,7 +1199,7 @@ export class Builder<T extends Record<string, any> = Record<string, any>> {
         return this.offset((page - 1) * perPage).limit(perPage);
     }
 
-    public joinSub(query: Function|Builder|string, as: string, first: Function|string, operator: string|null = null, second: string|null = null, type: string = 'inner', where: boolean = false): this {
+    public joinSub(query: ((query: Builder)=>void)|Builder|string, as: string, first: Function|string, operator: string|null = null, second: string|null = null, type: string = 'inner', where: boolean = false): this {
         let bindings;
         [query, bindings] = this.createSub(query);
 

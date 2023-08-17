@@ -1209,6 +1209,82 @@ export class Builder<T extends Record<string, any> = Record<string, any>> {
 
         return this.join(new Expression(expression), first, operator, second, type, where);
     }
+
+    public tap(callback: (query: this) => void): this {
+        callback(this);
+
+        return this;
+    }
+
+    public whereExists(callback: ((query: Builder)=>void)|Builder, boolean: string = 'and', not: boolean = false): this {
+        let query;
+        if (typeof callback === "function") {
+            query = this.forSubQuery();
+
+            // Similar to the sub-select clause, we will create a new query instance so
+            // the developer may cleanly specify the entire exists query and we will
+            // compile the whole thing in the grammar and insert it into the SQL.
+            callback(query);
+        } else {
+            query = callback;
+        }
+
+        return this.addWhereExistsQuery(query, boolean, not);
+    }
+
+    public orWhereExists(callback: ((query: Builder)=>void)|Builder, not: boolean = false): this {
+        return this.whereExists(callback, 'or', not);
+    }
+
+    public whereNotExists(callback: ((query: Builder)=>void)|Builder, boolean: string = 'and'): this {
+        return this.whereExists(callback, boolean, true);
+    }
+
+    public orWhereNotExists(callback: ((query: Builder)=>void)|Builder): this {
+        return this.orWhereExists(callback, true);
+    }
+
+    public leftJoinWhere(table: Expression|string, first: ((clause: JoinClause) => void)|string, operator: string, second: string): this {
+        return this.joinWhere(table, first, operator, second, 'left');
+    }
+
+    public crossJoin(table: Expression|string, first: ((join: JoinClause) => void)|string|null = null, operator: string|null = null, second: string|null = null): this {
+        if (first !== null) {
+            return this.join(table, first, operator, second, 'cross');
+        }
+
+        this._joins.push(this.newJoinClause(this, 'cross', table));
+
+        return this;
+    }
+
+    public whereRowValues(columns: unknown[], operator: string, values: unknown[], boolean: string = 'and'): this {
+        /*if (columns.length !== values.length) {
+            throw new InvalidArgumentException('The number of columns must match the number of values');//FIXME: implement this as a type check instead.
+        }*/
+
+        const type: Where['type'] = 'RowValues';
+
+        this._wheres.push({
+            type,
+            columns,
+            operator,
+            values,
+            boolean
+        });
+
+        this.addBinding(this.cleanBindings(values));
+
+        return this;
+    }
+
+    public orWhereRowValues(columns: unknown[], operator: string, values: unknown[]): this {
+        return this.whereRowValues(columns, operator, values, 'or');
+    }
+
+    public clone(): this {
+        return Object.assign(Object.create(Object.getPrototypeOf(this)), this);// https://stackoverflow.com/a/44782052
+    }
 }
 
 class ConditionExpression {

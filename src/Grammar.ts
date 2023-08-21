@@ -1,6 +1,8 @@
 import Expression from "./Query/Expression";
 
 export default abstract class Grammar {
+    protected tablePrefix: string = '';
+
     public wrapArray(values: Array<string|Expression>): unknown[] {
         return values.map(value => this.wrap(value));
     }
@@ -87,5 +89,11 @@ export default abstract class Grammar {
     /** Get the format for database stored dates. */
     public getDateFormat(): string {
         return 'Y-m-d H:i:s';
+    }
+
+    public setTablePrefix(prefix: string): this {
+        this.tablePrefix = prefix;
+
+        return this;
     }
 }

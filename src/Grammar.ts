@@ -52,7 +52,7 @@ export default abstract class Grammar {
 
     /** Create query parameter place-holders for an array. */
     public parameterize(values: Array<Expression|string|number>): string {
-        return values.map(value => this.parameter(value)).join(',');
+        return values.map(value => this.parameter(value)).join(', ');
     }
 
     /** Get the appropriate query parameter place-holder for a value. */

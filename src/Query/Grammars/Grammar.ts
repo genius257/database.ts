@@ -376,5 +376,122 @@ export default class Grammar extends BaseGrammar {
         return value;
     }
 
-    
+    protected whereNotIn(query: Builder, where: WhereOfType<"NotIn">): string {
+        if (where.values.length > 0) {
+            return `${this.wrap(where.column)} not in (${this.parameterize(where.values)})`;
+        }
+
+        return '1 = 1';
+    }
+
+    protected whereDate(query: Builder, where: WhereOfType<"Date">): string {
+        return this.dateBasedWhere('date', query, where);
+    }
+
+    protected whereTime(query: Builder, where: WhereOfType<"Time">): string {
+        return this.dateBasedWhere('time', query, where);
+    }
+
+    protected whereDay(query: Builder, where: WhereOfType<"Day">): string {
+        return this.dateBasedWhere('day', query, where);
+    }
+
+    protected whereMonth(query: Builder, where: WhereOfType<"Month">): string {
+        return this.dateBasedWhere('month', query, where);
+    }
+
+    protected whereYear(query: Builder, where: WhereOfType<"Year">): string {
+        return this.dateBasedWhere('year', query, where);
+    }
+
+    protected dateBasedWhere(type: string, query: Builder, where: WhereOfType<"Date"|"Time"|"Day"|"Month"|"Year">): string {//FIXME: add function signatures for type and where combinations
+        const value = this.parameter(where.value);
+
+        return `${type}(${this.wrap(where.column)}) ${where.operator} ${value}`;
+    }
+
+    protected whereExists(query: Builder, where: WhereOfType<"Exists">): string {
+        return `exists (${this.compileSelect(where.query)})`;
+    }
+
+    protected whereNotExists(query: Builder, where: WhereOfType<"NotExists">): string {
+        return `not exists (${this.compileSelect(where.query)})`;
+    }
+
+    protected whereRowValues(query: Builder, where: WhereOfType<"RowValues">): string {
+        const columns = this.columnize(where.columns);
+
+        const values = this.parameterize(where.values);
+
+        return `(${columns}) ${where.operator} (${values})`;
+    }
+
+    protected whereJsonContains(_query: Builder, where: WhereOfType<"JsonContains">): string {
+        const not = where.not ? 'not ' : '';
+
+        return `${not}${this.compileJsonContains(where.column, this.parameter(where.value))}`;
+    }
+
+    protected whereJsonContainsKey(query: Builder, where: WhereOfType<"JsonContainsKey">): string {
+        const not = where.not ? 'not ' : '';
+
+        return `${not}${this.compileJsonContainsKey(where.column)}`;
+    }
+
+    protected whereJsonLength(query: Builder, where: WhereOfType<"JsonLength">): string {
+        return this.compileJsonLength(
+            where.column,
+            where.operator,
+            this.parameter(where.value)
+        );
+    }
+
+    protected compileJsonLength(_column: string, _operator: string, _value: string): string {
+        throw new Error('This database engine does not support JSON length operations.');
+    }
+
+    protected compileJsonContainsKey(_column: string): string {
+        throw new Error('This database engine does not support JSON contains key operations.');
+    }
+
+    public prepareBindingForJsonContains(binding: unknown): string {
+        return JSON.stringify(binding);// source uses JSON_UNESCAPED_UNICODE flag: see source: https://github.com/laravel/framework/blob/256f4974a09e24170ceeeb9e573651fd5e1c703e/src/Illuminate/Database/Query/Grammars/Grammar.php#L623C38-L623C60
+    }
+
+    protected compileJsonContains(_column: string, _value: string): string {
+        throw new Error('This database engine does not support JSON contains operations.');
+    }
+
+    protected wrapJsonFieldAndPath(column: string): [string|number, string] {
+        const parts = column.split('->', 2);
+
+        const field = this.wrap(parts[0]);
+
+        const path = parts.length > 1 ? `, ${this.wrapJsonPath(parts[1], '->')}` : '';
+
+        return [field, path];
+    }
+
+    protected wrapJsonPath(value: string, delimiter: string = '->'): string {
+        value = value.replace(/([\\\\]+)?\\'/g, "''");
+
+        const jsonPath = value.split(delimiter).map(segment => this.wrapJsonPathSegment(segment)).join('.');
+
+        return `'$${jsonPath.startsWith('[') ? '' : '.'}${jsonPath}'`;
+    }
+
+    protected wrapJsonPathSegment(segment: string): string {
+        const parts = segment.match(/(\[[^\]]+\])+$/);
+        if (parts !== null) {
+            const key = segment.lastIndexOf(parts[0]) === -1 ? segment : segment.substring(0, segment.lastIndexOf(parts[0]));
+
+            if (key !== '') {
+                return `"${key}"${parts[0]}`;
+            }
+
+            return parts[0];
+        }
+
+        return `"${segment}"`;
+    }
 }

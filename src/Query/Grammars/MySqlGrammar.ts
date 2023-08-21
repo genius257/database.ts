@@ -1,5 +1,5 @@
-import { Builder, WhereOfType } from "..";
-import IndexHint from "../IndexHint";
+import { type Builder, type WhereOfType } from "..";
+import type IndexHint from "../IndexHint";
 import Grammar from "./Grammar";
 
 export default class MySqlGrammar extends Grammar {

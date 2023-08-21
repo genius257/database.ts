@@ -78,7 +78,7 @@ export default abstract class Grammar {
     /** Transforms expressions to their scalar types. */
     public getValue(expression: Expression|string|number) {
         if (this.isExpression(expression)) {
-            this.getValue(expression.getValue(this));
+            return this.getValue(expression.getValue(this));
         }
 
         return expression;

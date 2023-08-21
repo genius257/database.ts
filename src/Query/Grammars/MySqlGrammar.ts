@@ -161,7 +161,7 @@ export default class MySqlGrammar extends Grammar {
     }
 
     public prepareBindingsForUpdate(bindings: unknown[], values: Record<string, unknown>): unknown[] {
-        const values = Object.entries(values)
+        values = Object.entries(values)
             .filter(([column, value]) => !(this.isJsonSelector(column) && typeof value === 'boolean'))
             .map(value => Array.isArray(value) ? JSON.stringify(value) : value)
 

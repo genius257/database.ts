@@ -111,7 +111,6 @@ export class Table<T extends SourceType, Model extends typeof Model<T>, Structur
         this.model = model;
 
         Object.entries(structure).forEach(columnSpec => {
-            console.log(columnSpec[1].type);
             const column = this.column(columnSpec[0], columnSpec[1].type);
             if (columnSpec[1]?.nullable === true) {
                 column.nullable();

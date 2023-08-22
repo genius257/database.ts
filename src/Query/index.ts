@@ -81,7 +81,7 @@ export type Having = { type: 'Expression', column: ConditionExpression, boolean:
 export class Builder<T extends Record<string, unknown> = Record<string, unknown>> {
     public _columns: Array<(keyof T)|Expression> | ["*"] = ["*"];
     public _distinct: boolean | Array<keyof T> = false; //FIXME: PHP type is boolean | array. Look into the array type and relevance.
-    public _from: string | undefined;
+    public _from: string | Expression | undefined; //FIXME: Source diviation
     public _joins: JoinClause[] = [];
     public _wheres: Where[] = [];
     public _orders: Order[] = [];
@@ -167,7 +167,7 @@ export class Builder<T extends Record<string, unknown> = Record<string, unknown>
         return this;
     }
 
-    public selectSub(query: Builder | string, as: string) {
+    public selectSub(query: Builder | string | ((query: Builder)=>void), as: string) {
         let bindings;
         [query, bindings] = this.createSub(query);
 
@@ -187,7 +187,7 @@ export class Builder<T extends Record<string, unknown> = Record<string, unknown>
         return this;
     }
 
-    public fromSub(query: Builder | string, as: string) {
+    public fromSub(query: Builder | string | ((query: Builder) => void), as: string) {
         let bindings;
         [query, bindings] = this.createSub(query);
 
@@ -198,7 +198,7 @@ export class Builder<T extends Record<string, unknown> = Record<string, unknown>
     }
 
     /** Add a raw from clause to the query. */
-    public fromRaw(expression: string, bindings: Array<Value> = []) {
+    public fromRaw(expression: string|Expression, bindings: Array<Value> = []) {
         this._from = new Expression(expression);
 
         this.addBinding(bindings, 'from');
@@ -262,9 +262,10 @@ export class Builder<T extends Record<string, unknown> = Record<string, unknown>
         return this.join(table, first, operator, second, type);
     }
 
+    public where(values: Array<[string, Value]|[string, string, Value]>|Record<string, Value>|Expression): this
     public where(callback: (query: Builder) => void): this
-    public where(column: keyof T, value: Value): this
-    public where(column: keyof T, operator: string, value: Value, boolean?: string): this
+    public where(column: keyof T, value: Value|boolean|Expression): this//FIXME: Source diviation
+    public where(column: keyof T, operator: string, value: Value|Expression|((query: this)=>void), boolean?: string): this//FIXME: Source diviation
     public where(column: keyof T | ((query: Builder) => void), operator: Value | null = null, value: Value | null = null, boolean = 'and'): this { //FIXME: boolean property type narrowing to known valid query boolean operators
         if (column instanceof ConditionExpression) {
             const type: Where['type'] = 'Expression';
@@ -497,7 +498,7 @@ export class Builder<T extends Record<string, unknown> = Record<string, unknown>
         return this.whereNull(columns, boolean, true);
     }
 
-    public orWhereNotNull(column: Expression|string): this {
+    public orWhereNotNull(column: Expression|string|Array<string>): this {
         return this.whereNotNull(column, 'or');
     }
 
@@ -511,7 +512,7 @@ export class Builder<T extends Record<string, unknown> = Record<string, unknown>
     }
 
     protected forSubQuery(): Builder {
-        this.newQuery();
+        return this.newQuery();
     }
 
     protected parseSub(query: Builder | Relation | string): [string, SqlValue[]] {
@@ -562,7 +563,7 @@ export class Builder<T extends Record<string, unknown> = Record<string, unknown>
         return this.grammar;
     }
 
-    public having(column: Expression | ((query: Builder) => void) | string, operator: string | number | null = null, value: string | number | null = null, boolean: string = 'and'): this {
+    public having(column: Expression | ((query: Builder) => void) | string, operator: string | number | null = null, value: string | number | Expression | null = null, boolean: string = 'and'): this {
         let type: Having["type"] = 'Basic';
 
         if (column instanceof ConditionExpression) {
@@ -665,7 +666,7 @@ export class Builder<T extends Record<string, unknown> = Record<string, unknown>
         return this;
     }
 
-    public havingRaw(sql: string, bindings: unknown[], boolean: string = 'and'): this {
+    public havingRaw(sql: string, bindings: unknown[] = [], boolean: string = 'and'): this {
         const type: Having['type'] = 'Raw';
 
         this._havings.push({
@@ -686,6 +687,9 @@ export class Builder<T extends Record<string, unknown> = Record<string, unknown>
 
         return this;
     }
+
+
+    public whereIn(column: Expression|keyof T, values: Builder|((query: Builder) => void)|Array<Value|Expression>|Record<string, Value>, boolean?: string, not?: boolean): this
 
     public whereIn(column: Expression|keyof T, values: unknown, boolean: string = 'and', not: boolean = false): this {
         const type: Where['type'] = not ? 'NotIn' : 'In';
@@ -721,6 +725,8 @@ export class Builder<T extends Record<string, unknown> = Record<string, unknown>
     public orWhereIn(column: Expression|string, values: unknown): this {
         return this.whereIn(column, values, 'or');
     }
+
+    public whereNotIn(column: Expression|string, values: ((query: Builder) => void)|Array<Value>, boolean?: string): this
 
     public whereNotIn(column: Expression|string, values: unknown, boolean: string = 'and'): this {
         return this.whereIn(column, values, boolean, true);
@@ -931,7 +937,7 @@ export class Builder<T extends Record<string, unknown> = Record<string, unknown>
     }
 
     //FIXME: add method override signatures, based on usage in unit tests.
-    public orWhere(column: ((query: Builder) => void)|string|unknown[]|Expression, operator: unknown = null, value: unknown = null): this {
+    public orWhere(column: ((query: this) => void)|string|unknown[]|Expression, operator: unknown = null, value: Value|((query: Builder)=>void) = null): this {
         [value, operator] = this.prepareValueAndOperator(value, operator, arguments.length === 2);
 
         return this.where(column, operator, value, 'or');
@@ -941,7 +947,7 @@ export class Builder<T extends Record<string, unknown> = Record<string, unknown>
         return this.whereNot(column, operator, value, 'or');
     }
 
-    public whereNot(column: ((query: Builder)=>void)|string|unknown[]|Expression, operator: unknown = null, value: unknown = null, boolean: string = 'and'): this {
+    public whereNot(column: ((query: Builder)=>void)|string|unknown[]|Record<string, Value>|Expression, operator: unknown = null, value: unknown = null, boolean: string = 'and'): this {
         if (Array.isArray(column)) {
             return this.whereNested((query: Builder) => query.where(column, operator, value, boolean), `${boolean} not`);
         }
@@ -973,8 +979,8 @@ export class Builder<T extends Record<string, unknown> = Record<string, unknown>
         return this.whereDate(column, operator, value, 'or');
     }
 
-    public whereDay(column: Expression|string, value: Date|string|number): this//FIXME: Source diviation
-    public whereDay(column: Expression|string, operator: string, value: Date|string|number, boolean?: string): this
+    public whereDay(column: Expression|string, value: Date|string|number|Expression): this//FIXME: Source diviation
+    public whereDay(column: Expression|string, operator: string, value: Date|string|number|Expression, boolean?: string): this//FIXME: Source diviation
 
     public whereDay(column: Expression|string, operator: string, value: Date|string|number|null = null, boolean: string = 'and'): this {
         [value, operator] = this.prepareValueAndOperator(value, operator, arguments.length === 2);
@@ -1001,7 +1007,7 @@ export class Builder<T extends Record<string, unknown> = Record<string, unknown>
         return this.whereDay(column, operator, value, 'or');
     }
 
-    public whereMonth(column: Expression|string, value: Date|string|number):this //FIXME: Source diviation
+    public whereMonth(column: Expression|string, value: Date|string|number|Expression):this //FIXME: Source diviation
     public whereMonth(column: Expression|string, operator: string, value: Date|string|number|Expression): this //FIXME: Source diviation
 
     public whereMonth(column: Expression|string, operator: string, value: Date|string|number|null = null, boolean: string = 'and'): this {
@@ -1105,7 +1111,7 @@ export class Builder<T extends Record<string, unknown> = Record<string, unknown>
         this.union(query, true);
     }
 
-    public orderBy(column: Builder|Expression|string, direction: 'asc'|'desc' = 'asc'): this {
+    public orderBy(column: ((query: Builder)=>void)|Builder|Expression|string, direction: 'asc'|'desc' = 'asc'): this {
         if (this.isQueryable(column)) {
             const [query, bindings] = this.createSub(column);
 
@@ -1169,7 +1175,7 @@ export class Builder<T extends Record<string, unknown> = Record<string, unknown>
         return this.orderByRaw(this.grammar.compileRandom(seed));
     }
 
-    public orderByRaw(sql: string, bindings: unknown[]): this {
+    public orderByRaw(sql: string, bindings: unknown[] = []): this {
         const type: Order['type'] = 'Raw';
 
         this[this._unions.length > 0 ? '_unionOrders' : '_orders'].push({
@@ -1195,7 +1201,7 @@ export class Builder<T extends Record<string, unknown> = Record<string, unknown>
         return this;
     }
 
-    public orHaving(column: Expression|Function|string, operator: string|number|null = null, value: string|number|null = null): this {
+    public orHaving(column: Expression|((query: Builder) => void)|string, operator: string|number|null = null, value: string|number|null = null): this {
         [value, operator] = this.prepareValueAndOperator(value, operator, arguments.length === 2);
 
         return this.having(column, operator, value, 'or');
@@ -1225,7 +1231,7 @@ export class Builder<T extends Record<string, unknown> = Record<string, unknown>
         return this.offset((page - 1) * perPage).limit(perPage);
     }
 
-    public joinSub(query: ((query: Builder)=>void)|Builder|string, as: string, first: Function|string, operator: string|null = null, second: string|null = null, type: string = 'inner', where: boolean = false): this {
+    public joinSub(query: ((query: Builder)=>void)|Builder|string, as: string, first: Function|string, operator: string|null = null, second: string|number|null = null, type: string = 'inner', where: boolean = false): this {
         let bindings;
         [query, bindings] = this.createSub(query);
 
@@ -1330,6 +1336,9 @@ export class Builder<T extends Record<string, unknown> = Record<string, unknown>
         return clone;
     }
 
+    public whereTime(column: Expression|string, operator: string|Date|Expression): this//FIXME: Source diviation
+    public whereTime(column: Expression|string, operator: string, value?: Date|string|null|Expression, boolean?: string): this//FIXME: Source diviation
+
     public whereTime(column: Expression|string, operator: string, value: Date|string|null = null, boolean: string = 'and'): this {
         [value, operator] = this.prepareValueAndOperator(value, operator, arguments.length === 2);
 
@@ -1342,6 +1351,9 @@ export class Builder<T extends Record<string, unknown> = Record<string, unknown>
 
         return this.addDateBasedWhere('Time', column, operator, value, boolean);
     }
+
+    public orWhereTime(column: Expression|string, operator: string|Date|Expression): this//FIXME: Source diviation
+    public orWhereTime(column: Expression|string, operator: string, value: Date|string|null, boolean?: string): this//FIXME: Source diviation
 
     public orWhereTime(column: Expression|string, operator: string, value: Date|string|null = null, boolean: string = 'and'): this {
         [value, operator] = this.prepareValueAndOperator(value, operator, arguments.length === 2);
@@ -1370,7 +1382,7 @@ export class Builder<T extends Record<string, unknown> = Record<string, unknown>
         return this.joinSub(query, as, first, operator, second);
     }
 
-    public beforeQuery(callback: Function): this {
+    public beforeQuery(callback: (query: this)=>void): this {
         this._beforeQueryCallbacks.push(callback);
 
         return this;
@@ -1561,7 +1573,7 @@ export class JoinClause extends Builder {
         return this.whereColumn(first, operator, second, boolean);
     }
 
-    public orOn(first: ((query: Builder) => void) | string, operator: string | null = null, second: Expression | string | null = null): this {
+    public orOn(first: ((query: JoinClause) => void) | string, operator: string | null = null, second: Expression | string | null = null): this {
         return this.on(first, operator, second, 'or');
     }
 

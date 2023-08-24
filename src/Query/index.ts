@@ -43,9 +43,9 @@ export type Join = { //FIXME: remove? as Builder._joins inintially was expected 
 export type WhereOfType<T extends Where['type']> = Where & { type: T };
 
 export type Where = { type: 'Expression', column: Function | string | unknown[] | Expression, boolean: string }
-    | { type: 'Basic', column: unknown, operator: unknown, value: unknown, boolean: string }
+    | { type: 'Basic', column: unknown, operator: string, value: unknown, boolean: string }
     | { type: 'JsonBoolean', column: unknown, operator: unknown, value: unknown, boolean: string } //FIXME: all json related functionality SHOULD be removed.
-    | { type: 'Bitwise', column: unknown, operator: unknown, value: unknown, boolean: string }
+    | { type: 'Bitwise', column: unknown, operator: string, value: unknown, boolean: string }
     | { type: 'Column', first: string | unknown[], operator: string, second: string, boolean: string }
     | { type: 'raw', sql: string, boolean: string }
     | { type: 'In', column: Expression|string, values: unknown, boolean: string }

@@ -308,7 +308,7 @@ export default class Grammar extends BaseGrammar {
     protected whereBasic(query: Builder, where: WhereOfType<'Basic'>): string {
         const value = this.parameter(where.value);
 
-        const operator = where.operator.replace('?', '??');
+        const operator = where.operator.replace('?', '??');//FIXME: should we replace all instead?
 
         return `${this.wrap(where.column)} ${operator} ${value}`;
     }

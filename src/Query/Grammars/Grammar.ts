@@ -6,11 +6,11 @@ import JoinClause from "../JoinClause";
 
 export default class Grammar extends BaseGrammar {
     /** The grammar specific operators. */
-    protected operators: string[] = [];
+    protected operators: Readonly<string[]> = [] as const;
     /** The grammar specific bitwise operators. */
-    protected bitwiseOperators: string[] = [];
+    protected bitwiseOperators: Readonly<string[]> = [] as const;
     /** The components that make up a select clause. */
-    protected selectComponents = [
+    protected selectComponents: Readonly<string[]> = [
         'aggregate',
         'columns',
         'from',

@@ -21,7 +21,7 @@ function setNestedKey(obj: Record<string|number, unknown>, keyString: string, va
 }
 
 export default class SQLiteGrammar extends Grammar {
-    protected override operators: string[] = [
+    protected override operators = [
         '=',
         '<',
         '>',
@@ -36,7 +36,7 @@ export default class SQLiteGrammar extends Grammar {
         '|',
         '<<',
         '>>',
-    ];
+    ] as const;
 
     protected override compileLock(_query: Builder, _value: string | boolean): string {
         return "";

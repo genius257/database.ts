@@ -42,13 +42,13 @@ export default class MySqlGrammar extends Grammar {
     }
 
     protected override compileIndexHint(_query: Builder, indexHint: IndexHint): string {
-        switch (indexHint._type) {
+        switch (indexHint.type) {
             case 'hint':
-                return `use index (${indexHint._index})`;
+                return `use index (${indexHint.index})`;
             case 'force':
-                return `force index (${indexHint._index})`;
+                return `force index (${indexHint.index})`;
             default:
-                return `ignore index (${indexHint._index})`;
+                return `ignore index (${indexHint.index})`;
         }
     }
 

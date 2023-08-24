@@ -3,7 +3,7 @@ import type IndexHint from "../IndexHint";
 import Grammar from "./Grammar";
 
 export default class MySqlGrammar extends Grammar {
-    protected override operators: string[] = ['sounds like'];
+    protected override operators = ['sounds like'] as const;
 
     protected override whereNull(query: Builder, where:  WhereOfType<'Null'>): string {
         const columnValue = this.getValue(where.column).toString();

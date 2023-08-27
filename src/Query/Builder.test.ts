@@ -509,7 +509,7 @@ test('WhereDayMySql', () =>
     const builder = getMysqlBuilder();
     builder.select(['*']).from('users').whereDay('created_at', '=', 1);
     expect(builder.toSql()).toBe('select * from `users` where day(`created_at`) = ?');
-    expect(builder.getBindings()).toStrictEqual([1]);
+    expect(builder.getBindings()).toStrictEqual(['01']);
 })
 
 test('OrWhereDayMySql', () =>
@@ -517,7 +517,7 @@ test('OrWhereDayMySql', () =>
     const builder = getMysqlBuilder();
     builder.select(['*']).from('users').whereDay('created_at', '=', 1).orWhereDay('created_at', '=', 2);
     expect(builder.toSql()).toBe('select * from `users` where day(`created_at`) = ? or day(`created_at`) = ?');
-    expect(builder.getBindings()).toStrictEqual([1, 2]);
+    expect(builder.getBindings()).toStrictEqual(['01', '02']);
 })
 
 test('OrWhereDayPostgres', () =>
@@ -525,7 +525,7 @@ test('OrWhereDayPostgres', () =>
     const builder = getPostgresBuilder();
     builder.select(['*']).from('users').whereDay('created_at', '=', 1).orWhereDay('created_at', '=', 2);
     expect(builder.toSql()).toBe('select * from "users" where extract(day from "created_at") = ? or extract(day from "created_at") = ?');
-    expect(builder.getBindings()).toStrictEqual([1, 2]);
+    expect(builder.getBindings()).toStrictEqual(['01', '02']);
 })
 
 test('OrWhereDaySqlServer', () =>
@@ -533,7 +533,7 @@ test('OrWhereDaySqlServer', () =>
     const builder = getSqlServerBuilder();
     builder.select(['*']).from('users').whereDay('created_at', '=', 1).orWhereDay('created_at', '=', 2);
     expect(builder.toSql()).toBe('select * from [users] where day([created_at]) = ? or day([created_at]) = ?');
-    expect(builder.getBindings()).toStrictEqual([1, 2]);
+    expect(builder.getBindings()).toStrictEqual(['01', '02']);
 })
 
 test('WhereMonthMySql', () =>
@@ -541,7 +541,7 @@ test('WhereMonthMySql', () =>
     const builder = getMysqlBuilder();
     builder.select(['*']).from('users').whereMonth('created_at', '=', 5);
     expect(builder.toSql()).toBe('select * from `users` where month(`created_at`) = ?');
-    expect(builder.getBindings()).toStrictEqual([5]);
+    expect(builder.getBindings()).toStrictEqual(['05']);
 })
 
 test('OrWhereMonthMySql', () =>
@@ -549,7 +549,7 @@ test('OrWhereMonthMySql', () =>
     const builder = getMysqlBuilder();
     builder.select(['*']).from('users').whereMonth('created_at', '=', 5).orWhereMonth('created_at', '=', 6);
     expect(builder.toSql()).toBe('select * from `users` where month(`created_at`) = ? or month(`created_at`) = ?');
-    expect(builder.getBindings()).toStrictEqual([5, 6]);
+    expect(builder.getBindings()).toStrictEqual(['05', '06']);
 })
 
 test('OrWhereMonthPostgres', () =>
@@ -557,7 +557,7 @@ test('OrWhereMonthPostgres', () =>
     const builder = getPostgresBuilder();
     builder.select(['*']).from('users').whereMonth('created_at', '=', 5).orWhereMonth('created_at', '=', 6);
     expect(builder.toSql()).toBe('select * from "users" where extract(month from "created_at") = ? or extract(month from "created_at") = ?');
-    expect(builder.getBindings()).toStrictEqual([5, 6]);
+    expect(builder.getBindings()).toStrictEqual(['05', '06']);
 })
 
 test('OrWhereMonthSqlServer', () =>
@@ -565,7 +565,7 @@ test('OrWhereMonthSqlServer', () =>
     const builder = getSqlServerBuilder();
     builder.select(['*']).from('users').whereMonth('created_at', '=', 5).orWhereMonth('created_at', '=', 6);
     expect(builder.toSql()).toBe('select * from [users] where month([created_at]) = ? or month([created_at]) = ?');
-    expect(builder.getBindings()).toStrictEqual([5, 6]);
+    expect(builder.getBindings()).toStrictEqual(['05', '06']);
 })
 
 test('WhereYearMySql', () =>
@@ -683,7 +683,7 @@ test('WhereDayPostgres', () =>
     const builder = getPostgresBuilder();
     builder.select(['*']).from('users').whereDay('created_at', '=', 1);
     expect(builder.toSql()).toBe('select * from "users" where extract(day from "created_at") = ?');
-    expect(builder.getBindings()).toStrictEqual([1]);
+    expect(builder.getBindings()).toStrictEqual(['01']);
 })
 
 test('WhereMonthPostgres', () =>
@@ -691,7 +691,7 @@ test('WhereMonthPostgres', () =>
     const builder = getPostgresBuilder();
     builder.select(['*']).from('users').whereMonth('created_at', '=', 5);
     expect(builder.toSql()).toBe('select * from "users" where extract(month from "created_at") = ?');
-    expect(builder.getBindings()).toStrictEqual([5]);
+    expect(builder.getBindings()).toStrictEqual(['05']);
 })
 
 test('WhereYearPostgres', () =>
@@ -715,27 +715,27 @@ test('WhereLikePostgres', () =>
     let builder = getPostgresBuilder();
     builder.select(['*']).from('users').where('id', 'like', '1');
     expect(builder.toSql()).toBe('select * from "users" where "id"::text like ?');
-    expect(builder.getBindings()).toStrictEqual([1]);
+    expect(builder.getBindings()).toStrictEqual(['1']);
 
     builder = getPostgresBuilder();
     builder.select(['*']).from('users').where('id', 'LIKE', '1');
     expect(builder.toSql()).toBe('select * from "users" where "id"::text LIKE ?');
-    expect(builder.getBindings()).toStrictEqual([1]);
+    expect(builder.getBindings()).toStrictEqual(['1']);
 
     builder = getPostgresBuilder();
     builder.select(['*']).from('users').where('id', 'ilike', '1');
     expect(builder.toSql()).toBe('select * from "users" where "id"::text ilike ?');
-    expect(builder.getBindings()).toStrictEqual([1]);
+    expect(builder.getBindings()).toStrictEqual(['1']);
 
     builder = getPostgresBuilder();
     builder.select(['*']).from('users').where('id', 'not like', '1');
     expect(builder.toSql()).toBe('select * from "users" where "id"::text not like ?');
-    expect(builder.getBindings()).toStrictEqual([1]);
+    expect(builder.getBindings()).toStrictEqual(['1']);
 
     builder = getPostgresBuilder();
     builder.select(['*']).from('users').where('id', 'not ilike', '1');
     expect(builder.toSql()).toBe('select * from "users" where "id"::text not ilike ?');
-    expect(builder.getBindings()).toStrictEqual([1]);
+    expect(builder.getBindings()).toStrictEqual(['1']);
 })
 
 test('WhereDateSqlite', () =>
@@ -755,7 +755,7 @@ test('WhereDaySqlite', () =>
     const builder = getSQLiteBuilder();
     builder.select(['*']).from('users').whereDay('created_at', '=', 1);
     expect(builder.toSql()).toBe('select * from "users" where strftime(\'%d\', "created_at") = cast(? as text)');
-    expect(builder.getBindings()).toStrictEqual([1]);
+    expect(builder.getBindings()).toStrictEqual(['01']);
 })
 
 test('WhereMonthSqlite', () =>
@@ -763,7 +763,7 @@ test('WhereMonthSqlite', () =>
     const builder = getSQLiteBuilder();
     builder.select(['*']).from('users').whereMonth('created_at', '=', 5);
     expect(builder.toSql()).toBe('select * from "users" where strftime(\'%m\', "created_at") = cast(? as text)');
-    expect(builder.getBindings()).toStrictEqual([5]);
+    expect(builder.getBindings()).toStrictEqual(['05']);
 })
 
 test('WhereYearSqlite', () =>
@@ -807,7 +807,7 @@ test('WhereDaySqlServer', () =>
     const builder = getSqlServerBuilder();
     builder.select(['*']).from('users').whereDay('created_at', '=', 1);
     expect(builder.toSql()).toBe('select * from [users] where day([created_at]) = ?');
-    expect(builder.getBindings()).toStrictEqual([1]);
+    expect(builder.getBindings()).toStrictEqual(['01']);
 })
 
 test('WhereMonthSqlServer', () =>
@@ -815,7 +815,7 @@ test('WhereMonthSqlServer', () =>
     const builder = getSqlServerBuilder();
     builder.select(['*']).from('users').whereMonth('created_at', '=', 5);
     expect(builder.toSql()).toBe('select * from [users] where month([created_at]) = ?');
-    expect(builder.getBindings()).toStrictEqual([5]);
+    expect(builder.getBindings()).toStrictEqual(['05']);
 })
 
 test('WhereYearSqlServer', () =>
@@ -2494,7 +2494,7 @@ test('JoinsWithSubqueryCondition', () =>
         });
     });
     expect(builder.toSql()).toBe('select * from "users" left join "contacts" on "users"."id" = "contacts"."id" and "contact_type_id" in (select "id" from "contact_types" where "category_id" = ? and "deleted_at" is null)');
-    expect(builder.getBindings()).toStrictEqual([1]);
+    expect(builder.getBindings()).toStrictEqual(['1']);
 
     builder = getBuilder();
     builder.select(['*']).from('users').leftJoin('contacts', function ($j) {
@@ -2553,7 +2553,7 @@ test('JoinsWithMultipleNestedJoins', () =>
             });
     });
     expect(builder.toSql()).toBe('select "users"."id", "contacts"."id", "contact_types"."id", "countrys"."id", "planets"."id" from "users" left join ("contacts" inner join "contact_types" on "contacts"."contact_type_id" = "contact_types"."id" left join ("countrys" inner join "planets" on "countrys"."planet_id" = "planet"."id" and "planet"."is_settled" = ? and "planet"."population" >= ?) on "contacts"."country" = "countrys"."country") on "users"."id" = "contacts"."id"');
-    expect(builder.getBindings()).toStrictEqual(['1', 10000]);
+    expect(builder.getBindings()).toStrictEqual([1, 10000]);
 })
 
 test('JoinsWithNestedJoinWithAdvancedSubqueryCondition', () =>
@@ -2573,7 +2573,7 @@ test('JoinsWithNestedJoinWithAdvancedSubqueryCondition', () =>
             });
     });
     expect(builder.toSql()).toBe('select "users"."id", "contacts"."id", "contact_types"."id" from "users" left join ("contacts" inner join "contact_types" on "contacts"."contact_type_id" = "contact_types"."id") on "users"."id" = "contacts"."id" and exists (select * from "countrys" inner join "planets" on "countrys"."planet_id" = "planet"."id" and "planet"."is_settled" = ? where "contacts"."country" = "countrys"."country" and "planet"."population" >= ?)');
-    expect(builder.getBindings()).toStrictEqual(['1', 10000]);
+    expect(builder.getBindings()).toStrictEqual([1, 10000]);
 })
 
 test('JoinWithNestedOnCondition', () =>

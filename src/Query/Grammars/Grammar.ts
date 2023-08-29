@@ -25,6 +25,7 @@ export default class Grammar extends BaseGrammar {
         'lock',
     ] as const;
 
+    /** Compile a select query into SQL. */
     public compileSelect(query: Builder): string {
         if ((query._unions.length > 0 || query._havings.length > 0) && query._aggregate !== undefined) {
             return this.compileUnionAggregate(query);
@@ -43,6 +44,7 @@ export default class Grammar extends BaseGrammar {
         return sql;
     }
 
+    /** Compile the components necessary for a select clause. */
     protected compileComponents(query: Builder): Record<string, unknown> {
         const sql: Record<string, unknown> = {};
 
@@ -63,6 +65,7 @@ export default class Grammar extends BaseGrammar {
         return sql;
     }
 
+    /** Compile a union aggregate query into SQL. */
     protected compileUnionAggregate(query: Builder): string {
         const sql = this.compileAggregate(query, query._aggregate);
 
@@ -82,10 +85,12 @@ export default class Grammar extends BaseGrammar {
             .join(' ');
     }
 
+    /** Wrap a union subquery in parentheses. */
     protected wrapUnion(sql: string): string {
         return `(${sql})`;
     }
 
+    /** Compile the "union" queries attached to the main query. */
     protected compileUnions(query: Builder): string {
         let sql = '';
 
@@ -108,6 +113,7 @@ export default class Grammar extends BaseGrammar {
         return sql.trimStart();
     }
 
+    /** Compile an aggregated select clause. */
     protected compileAggregate(query: Builder, aggregate: Aggregate): string {
         let column = this.columnize(aggregate.columns);
 
@@ -120,6 +126,7 @@ export default class Grammar extends BaseGrammar {
         return `select ${aggregate.function}(${column}) as aggregate`;
     }
 
+    /** Compile the "order by" portions of the query. */
     protected compileOrders(query: Builder, orders: Order[]): string {
         if (orders.length > 0) {
             return `order by ${this.compileOrdersToArray(query, orders).join(', ')}`;
@@ -132,6 +139,7 @@ export default class Grammar extends BaseGrammar {
         return orders.map(order => order?.sql ?? `${this.wrap(order.column)} ${order.direction}`);
     }
 
+    /** Compile the "select *" portion of the query. */
     protected compileColumns(query: Builder, columns: string[]): string | undefined {
         // If the query is actually performing an aggregating select, we will let that
         // compiler handle the building of the select clauses, as it will need some
@@ -145,10 +153,12 @@ export default class Grammar extends BaseGrammar {
         return `${select}${this.columnize(columns)}`;
     }
 
+    /** Compile the "limit" portions of the query. */
     protected compileLimit(_query: Builder, limit: number): string {
         return `limit ${Math.round(limit)}`;//TODO: in source limit is casted to int, this would be best match in JS? see: https://github.com/laravel/framework/blob/19b42097f542a837d3c0e6aad2abaf2b05a6cbee/src/Illuminate/Database/Query/Grammars/Grammar.php#L916
     }
 
+    /** Compile the "offset" portions of the query. */
     protected compileOffset(_query: Builder, offset: number): string {
         return `offset ${Math.round(offset)}`;//TODO: in source limit is casted to int, this would be best match in JS? see: https://github.com/laravel/framework/blob/19b42097f542a837d3c0e6aad2abaf2b05a6cbee/src/Illuminate/Database/Query/Grammars/Grammar.php#L928
     }
@@ -162,6 +172,7 @@ export default class Grammar extends BaseGrammar {
         throw new Error('The current grammar implementation does not support index hinting'); //FIXME: currently not implemented in source! child classes from source implements this, but could cause runtime exceptions for other 3rd party implementaions!
     }
 
+    /** Compile the "join" portions of the query. */
     protected compileJoins(query: Builder, joins: JoinClause[]): string {
         return joins.map(join => {
             const table = this.wrapTable(join.table);
@@ -174,6 +185,7 @@ export default class Grammar extends BaseGrammar {
         }).join(' ');
     }
 
+    /** Compile the "where" portions of the query. */
     protected compileWheres(query: Builder, _?: unknown): string {
         // Each type of where clause has its own compiler function, which is responsible
         // for actually creating the where clauses SQL. This helps keep the code nice
@@ -197,42 +209,51 @@ export default class Grammar extends BaseGrammar {
         return `group by ${this.columnize(groups)}`;
     }
 
+    /** Compile the "having" portions of the query. */
     protected compileHavings(query: Builder, _?: unknown): string {
         return `having ${this.removeLeadingBoolean(query._havings.map(having => `${having.boolean} ${this.compileHaving(having)}`).join(' '))}`
     }
 
+    /** Compile the lock into SQL. */
     protected compileLock(_query: Builder, value: boolean|string): string {
         return typeof value === "string" ? value : '';
     }
 
+    /** Compile a single union statement. */
     protected compileUnion(union: Union): string {
         const conjunction = union.all ? ' union all ' : ' union ';
 
         return `${conjunction}${this.wrapUnion(union.query.toSql())}`;
     }
 
+    /** Get an array of all the where clauses for the query. */
     protected compileWheresToArray(query: Builder): string[] {
         return query._wheres.map(where => `${where.boolean} ${this[`where${where.type}`](query, where)}`);
     }
 
+    /** Remove the leading boolean from a statement. */
     protected removeLeadingBoolean(value: string): string { 
         return value.replace(/and |or /i, ''); //FIXME: varify that this matches srouce preg_replace functionality. see: https://github.com/laravel/framework/blob/5a7f2b4742b3dc7ce43acc698f400a9395801c7b/src/Illuminate/Database/Query/Grammars/Grammar.php#L1350
     }
 
+    /** Get the grammar specific bitwise operators. */
     public getBitwiseOperators() {
         return this.bitwiseOperators;
     }
 
+    /**  Get the grammar specific operators. */
     public getOperators() {
         return this.operators;
     }
 
+    /** Format the where clause statements into one string. */
     protected concatenateWhereClauses(query: Builder, sql: unknown[]): string {
         const conjunction = query instanceof JoinClause ? 'on' : 'where';
 
         return `${conjunction} ${this.removeLeadingBoolean(sql.join(' '))}`;
     }
 
+    /** Compile a single having clause. */
     protected compileHaving(having: Having): string {
         // If the having clause is "raw", we can just return the clause straight away
         // without doing any more processing on it. Otherwise, we will compile the
@@ -269,18 +290,21 @@ export default class Grammar extends BaseGrammar {
         return `${column} ${between} ${min} and ${max}`;
     }
 
+    /** Compile a having null clause. */
     protected compileHavingNull(having: HavingOfType<'Null'>): string {
         const column = this.wrap(having.column);
 
         return `${column} is null`;
     }
 
+    /** Compile a having not null clause. */
     protected compileHavingNotNull(having: HavingOfType<'NotNull'>): string {
         const column = this.wrap(having.column);
 
         return `${column} is not null`;
     }
 
+    /** Compile a having clause involving a bit operator. */
     protected compileHavingBit(having: HavingOfType<'Bit'>): string {
         const column = this.wrap(having.column);
 
@@ -289,14 +313,17 @@ export default class Grammar extends BaseGrammar {
         return `(${column} ${having.operator} ${parameter}) != 0`;
     }
 
+    /** Compile a having clause involving an expression. */
     protected compileHavingExpression(having: HavingOfType<'Expression'>): string {
         return having.column.getValue(this);
     }
 
+    /** Compile a nested having clause. */
     protected compileNestedHavings(having: HavingOfType<'Nested'>): string {
         return `(${this.compileHavings(having.query).substring(7)})`;
     }
 
+    /** Compile a basic having clause. */
     protected compileBasicHaving(having: HavingOfType<'Basic'>): string {
         const column = this.wrap(having.column);
 
@@ -305,6 +332,7 @@ export default class Grammar extends BaseGrammar {
         return `${column} ${having.operator} ${parameter}`;
     }
 
+    /** Compile a basic where clause. */
     protected whereBasic(query: Builder, where: WhereOfType<'Basic'>): string {
         const value = this.parameter(where.value);
 
@@ -313,6 +341,7 @@ export default class Grammar extends BaseGrammar {
         return `${this.wrap(where.column)} ${operator} ${value}`;
     }
 
+    /** Compile a nested where clause. */
     protected whereNested(query: Builder, where: WhereOfType<'Nested'>) {
         // Here we will calculate what portion of the string we need to remove. If this
         // is a join clause query, we need to remove the "on" portion of the SQL and
@@ -322,24 +351,29 @@ export default class Grammar extends BaseGrammar {
         return `(${this.compileWheres(where.query), offset})`;
     }
 
+    /** Compile a "where null" clause. */
     protected whereNull(query: Builder, where: WhereOfType<'Null'>): string {
         return `${this.wrap(where.column)} is null`;
     }
 
+    /** Compile a where condition with a sub-select. */
     protected whereSub(query: Builder, where: WhereOfType<'Sub'>): string {
         const select = this.compileSelect(where.query);
 
         return this.wrap(`${where.column} ${where.operator} (${select})`);
     }
 
+    /** Compile a clause based on an expression. */
     public whereExpression(query: Builder, where: WhereOfType<'Expression'>): string {
         return where.column.getValue(this);
     }
 
+    /** Compile a bitwise operator where clause. */
     protected whereBitwise(query: Builder, where: WhereOfType<'Bitwise'>): string {
         return this.whereBasic(query, where);
     }
 
+    /** Compile a "where JSON boolean" clause. */
     protected whereJsonBoolean(query: Builder, where: WhereOfType<'JsonBoolean'>): string { //FIXME: json related methods SHOULD be removed
         const column = this.wrapJsonBooleanSelector(where.column);
 
@@ -348,10 +382,13 @@ export default class Grammar extends BaseGrammar {
         return `${column} ${where.operator} ${value}`;
     }
 
+    /** Compile a "where not null" clause. */
     protected whereNotNull(query: Builder, where: WhereOfType<'NotNull'>): string {
         return `${this.wrap(where.column)} is not null`;
     }
 
+    /** Compile a "between" where clause. */
+    /** Compile a where clause comparing two columns. */
     protected whereColumn(query: Builder, where: WhereOfType<'Column'>): string {
         return `${this.wrap(where.first)} ${where.operator} ${this.wrap(where.second)}`;
     }
@@ -360,6 +397,7 @@ export default class Grammar extends BaseGrammar {
         return where.sql;
     }
 
+    /** Compile a "where in" clause. */
     protected whereIn(query: Builder, where: WhereOfType<'In'>): string {
         if (where.values.length > 0) {
             return `${this.wrap(where.column)} in (${this.parameterize(where.values)})`;
@@ -368,14 +406,17 @@ export default class Grammar extends BaseGrammar {
         return '0 = 1';
     }
 
+    /** Wrap the given JSON selector for boolean values. */
     protected wrapJsonBooleanSelector(value: string): string { //FIXME: json related methods SHOULD be removed
         return this.wrapJsonSelector(value);
     }
 
+    /** Wrap the given JSON boolean value. */
     protected wrapJsonBooleanValue(value: string): string { //FIXME: json related methods SHOULD be removed
         return value;
     }
 
+    /** Compile a "where not in" clause. */
     protected whereNotIn(query: Builder, where: WhereOfType<"NotIn">): string {
         if (where.values.length > 0) {
             return `${this.wrap(where.column)} not in (${this.parameterize(where.values)})`;
@@ -388,36 +429,44 @@ export default class Grammar extends BaseGrammar {
         return this.dateBasedWhere('date', query, where);
     }
 
+    /** Compile a "where time" clause. */
     protected whereTime(query: Builder, where: WhereOfType<"Time">): string {
         return this.dateBasedWhere('time', query, where);
     }
 
+    /** Compile a "where day" clause. */
     protected whereDay(query: Builder, where: WhereOfType<"Day">): string {
         return this.dateBasedWhere('day', query, where);
     }
 
+    /** Compile a "where month" clause. */
     protected whereMonth(query: Builder, where: WhereOfType<"Month">): string {
         return this.dateBasedWhere('month', query, where);
     }
 
+    /** Compile a "where year" clause. */
     protected whereYear(query: Builder, where: WhereOfType<"Year">): string {
         return this.dateBasedWhere('year', query, where);
     }
 
+    /** Compile a date based where clause. */
     protected dateBasedWhere(type: string, query: Builder, where: WhereOfType<"Date"|"Time"|"Day"|"Month"|"Year">): string {//FIXME: add function signatures for type and where combinations
         const value = this.parameter(where.value);
 
         return `${type}(${this.wrap(where.column)}) ${where.operator} ${value}`;
     }
 
+    /** Compile a where exists clause. */
     protected whereExists(query: Builder, where: WhereOfType<"Exists">): string {
         return `exists (${this.compileSelect(where.query)})`;
     }
 
+    /** Compile a where exists clause. */
     protected whereNotExists(query: Builder, where: WhereOfType<"NotExists">): string {
         return `not exists (${this.compileSelect(where.query)})`;
     }
 
+    /** Compile a where row values condition. */
     protected whereRowValues(query: Builder, where: WhereOfType<"RowValues">): string {
         const columns = this.columnize(where.columns);
 
@@ -426,18 +475,21 @@ export default class Grammar extends BaseGrammar {
         return `(${columns}) ${where.operator} (${values})`;
     }
 
+    /** Compile a "where JSON contains" clause. */
     protected whereJsonContains(_query: Builder, where: WhereOfType<"JsonContains">): string {
         const not = where.not ? 'not ' : '';
 
         return `${not}${this.compileJsonContains(where.column, this.parameter(where.value))}`;
     }
 
+    /** Compile a "where JSON contains key" clause. */
     protected whereJsonContainsKey(query: Builder, where: WhereOfType<"JsonContainsKey">): string {
         const not = where.not ? 'not ' : '';
 
         return `${not}${this.compileJsonContainsKey(where.column)}`;
     }
 
+    /** Compile a "where JSON length" clause. */
     protected whereJsonLength(query: Builder, where: WhereOfType<"JsonLength">): string {
         return this.compileJsonLength(
             where.column,
@@ -446,18 +498,22 @@ export default class Grammar extends BaseGrammar {
         );
     }
 
+    /** Compile a "JSON length" statement into SQL. */
     protected compileJsonLength(_column: string, _operator: string, _value: string): string {
         throw new Error('This database engine does not support JSON length operations.');
     }
 
+    /** Compile a "JSON contains key" statement into SQL. */
     protected compileJsonContainsKey(_column: string): string {
         throw new Error('This database engine does not support JSON contains key operations.');
     }
 
+    /** Prepare the binding for a "JSON contains" statement. */
     public prepareBindingForJsonContains(binding: unknown): string {
         return JSON.stringify(binding);// source uses JSON_UNESCAPED_UNICODE flag: see source: https://github.com/laravel/framework/blob/256f4974a09e24170ceeeb9e573651fd5e1c703e/src/Illuminate/Database/Query/Grammars/Grammar.php#L623C38-L623C60
     }
 
+    /** Compile a "JSON contains" statement into SQL. */
     protected compileJsonContains(_column: string, _value: string): string {
         throw new Error('This database engine does not support JSON contains operations.');
     }

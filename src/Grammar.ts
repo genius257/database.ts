@@ -1,8 +1,10 @@
 import Expression from "./Query/Expression";
 
 export default abstract class Grammar {
+    /** The grammar table prefix. */
     protected tablePrefix: string = '';
 
+    /** Wrap an array of values. */
     public wrapArray(values: Array<string|Expression>): unknown[] {
         return values.map(value => this.wrap(value));
     }
@@ -35,14 +37,17 @@ export default abstract class Grammar {
         return `${this.wrap(segments[0])} as ${this.wrapValue(segments[1])}`;
     }
 
+    /** Wrap the given value segments. */
     public wrapSegments(segments: Array<string>): string {
         return segments.map((value, index) => (index === 0 && segments.length > 1) ? this.wrapTable(value) : this.wrapValue(value)).join('.');
     }
     
+    /** Wrap a single string in keyword identifiers. */
     protected wrapValue(value: string): string {
         return value === "*" ? value : `"${value.replace(/"/g, '""')}"`;
     }
 
+    /** Wrap the given JSON selector. */
     protected wrapJsonSelector(_value: string): string {
         throw new Error('This database engine does not support JSON operations.');
     }
@@ -91,6 +96,7 @@ export default abstract class Grammar {
         return 'Y-m-d H:i:s';
     }
 
+    /** Set the grammar's table prefix. */
     public setTablePrefix(prefix: string): this {
         this.tablePrefix = prefix;
 

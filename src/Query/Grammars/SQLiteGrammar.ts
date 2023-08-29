@@ -46,27 +46,27 @@ export default class SQLiteGrammar extends Grammar {
         return `select * from (${sql})`;
     }
 
-    protected whereDate(query: Builder, where: WhereOfType<'Date'>): string {
+    protected override whereDate(query: Builder, where: WhereOfType<'Date'>): string {
         return this.dateBasedWhere('%Y-%m-%d', query, where);
     }
 
-    protected whereDay(query: Builder, where: WhereOfType<'Day'>): string {
+    protected override whereDay(query: Builder, where: WhereOfType<'Day'>): string {
         return this.dateBasedWhere('%d', query, where);
     }
 
-    protected whereMonth(query: Builder, where: WhereOfType<'Month'>): string {
+    protected override whereMonth(query: Builder, where: WhereOfType<'Month'>): string {
         return this.dateBasedWhere('%m', query, where);
     }
 
-    protected whereYear(query: Builder, where: WhereOfType<'Year'>): string {
+    protected override whereYear(query: Builder, where: WhereOfType<'Year'>): string {
         return this.dateBasedWhere('%Y', query, where);
     }
 
-    protected whereTime(query: Builder, where: WhereOfType<'Time'>): string {
+    protected override whereTime(query: Builder, where: WhereOfType<'Time'>): string {
         return this.dateBasedWhere('%H:%M:%S', query, where);
     }
 
-    protected dateBasedWhere(type: string, query: Builder, where: WhereOfType<'Date'|'Day'|'Month'|'Year'|'Time'>): string {
+    protected override dateBasedWhere(type: string, query: Builder, where: WhereOfType<'Date'|'Day'|'Month'|'Year'|'Time'>): string {
         const value = this.parameter(where.value);
 
         return `strftime('${type}', ${this.wrap(where.column)}) ${where.operator} cast(${value} as text)`;
@@ -76,19 +76,19 @@ export default class SQLiteGrammar extends Grammar {
         return indexHint.type === 'force' ? `indexed by ${indexHint.index}` : '';
     }
 
-    protected compileJsonLength(column: string, operator: string, value: string): string {
+    protected override compileJsonLength(column: string, operator: string, value: string): string {
         const [field, path] = this.wrapJsonFieldAndPath(column);
 
         return `json_array_length(${field}${path}) ${operator} ${value}`;
     }
 
-    protected compileJsonContainsKey(column: string): string {
+    protected override compileJsonContainsKey(column: string): string {
         const [field, path] = this.wrapJsonFieldAndPath(column);
 
         return `json_type(${field}${path}) is not null`;
     }
 
-    public compileUpdate(query: Builder, values: unknown[]): string {
+    public override compileUpdate(query: Builder, values: unknown[]): string {
         if (query._joins.length > 0 || query._limit !== undefined) {
             return this.compileUpdateWithJoinsOrLimit(query, values);
         }
@@ -96,11 +96,11 @@ export default class SQLiteGrammar extends Grammar {
         return super.compileUpdate(query, values);
     }
 
-    public compileInsertOrIgnore(query: Builder, values: unknown[]): string {
+    public override compileInsertOrIgnore(query: Builder, values: unknown[]): string {
         return this.compileInsert(query, values).replace('insert', 'insert or ignore');
     }
 
-    protected compileUpdateColumns(query: Builder, values: Record<string, unknown>): string {
+    protected override compileUpdateColumns(query: Builder, values: Record<string, unknown>): string {
         const jsonGroups = this.groupJsonColumnsForUpdate(values);
 
         //this step was split into multiplke steps, compared to the source, due to PHP vs JS complexity. source: https://github.com/laravel/framework/blob/256f4974a09e24170ceeeb9e573651fd5e1c703e/src/Illuminate/Database/Query/Grammars/SQLiteGrammar.php#L201
@@ -118,7 +118,7 @@ export default class SQLiteGrammar extends Grammar {
         return mappedValues.join(', ');
     }
 
-    public compileUpsert(query: Builder, values: unknown[], uniqueBy: unknown[], update: unknown[]): string {
+    public override compileUpsert(query: Builder, values: unknown[], uniqueBy: unknown[], update: unknown[]): string {
         let sql = this.compileInsert(query, values);
 
         sql += ` on conflict (${this.columnize(uniqueBy)}) do update set `;
@@ -160,7 +160,7 @@ export default class SQLiteGrammar extends Grammar {
         return `update ${table} set ${columns} where ${this.wrap('rowid')} in (${selectSql})`;
     }
 
-    public prepareBindingsForUpdate(bindings: unknown[], values: unknown[]): unknown[] {
+    public override prepareBindingsForUpdate(bindings: unknown[], values: unknown[]): unknown[] {
         const groups = this.groupJsonColumnsForUpdate(values);
 
         values = values.filter((value, key) => !this.isJsonSelector(key)).merge($groups).map(function ($value) {
@@ -172,7 +172,7 @@ export default class SQLiteGrammar extends Grammar {
         return Object.values({...values, ...cleanBindings.flat()});
     }
 
-    public compileDelete(query: Builder): string {
+    public override compileDelete(query: Builder): string {
         if (query._joins.length > 0 || query._limit !== undefined) {
             return this.compileDeleteWithJoinsOrLimit(query);
         }
@@ -190,14 +190,14 @@ export default class SQLiteGrammar extends Grammar {
         return `delete from ${table} where ${this.wrap('rowid')} in (${selectSql})`;
     }
 
-    public compileTruncate(query: Builder): Record<string, Array<unknown>> {
+    public override compileTruncate(query: Builder): Record<string, Array<unknown>> {
         return {
             'delete from sqlite_sequence where name = ?': [query._from],
             [`delete from ${this.wrapTable(query._from)}`]: [],
         }
     }
 
-    protected wrapJsonSelector(value: string): string {
+    protected override wrapJsonSelector(value: string): string {
         const [field, path] = this.wrapJsonFieldAndPath(value);
 
         return `json_extract(${field}.${path})`;

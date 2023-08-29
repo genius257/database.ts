@@ -1,4 +1,5 @@
-import { type Builder, type WhereOfType } from "..";
+import { Bindings, type Builder, type WhereOfType } from "..";
+import Expression from "../Expression";
 import type IndexHint from "../IndexHint";
 import Grammar from "./Grammar";
 
@@ -29,7 +30,7 @@ export default class MySqlGrammar extends Grammar {
         return super.whereNotNull(query, where);
     }
 
-    public whereFullText(_query: Builder, where: WhereOfType<"Fulltext">): string {
+    public override whereFullText(_query: Builder, where: WhereOfType<"Fulltext">): string {
         const columns = this.columnize(where.columns);
 
         const value = this.parameter(where.value);
@@ -52,33 +53,33 @@ export default class MySqlGrammar extends Grammar {
         }
     }
 
-    public compileInsertOrIgnore(query: Builder, values: unknown[]): string {
+    public override compileInsertOrIgnore(query: Builder, values: unknown[]): string {
         return this.compileInsert(query, values).replace('insert', 'insert ignore');
     }
 
-    protected compileJsonContains(column: string, value: string): string {
+    protected override compileJsonContains(column: string, value: string): string {
         const [field, path] = this.wrapJsonFieldAndPath(column);
 
         return `json_contains(${field}, ${value}${path})`;
     }
 
-    protected compileJsonContainsKey(column: string): string {
+    protected override compileJsonContainsKey(column: string): string {
         const [field, path] = this.wrapJsonFieldAndPath(column);
 
         return `ifnull(json_contains_path(${field}, 'one'${path}), 0)`;
     }
 
-    protected compileJsonLength(column: string, operator: string, value: string): string {
+    protected override compileJsonLength(column: string, operator: string, value: string): string {
         const [field, path] = this.wrapJsonFieldAndPath(column);
 
         return `json_length(${field}${path}) ${operator} ${value}`;
     }
 
-    public compileJsonValueCast(value: string): string {
+    public override compileJsonValueCast(value: string): string {
         return `cast(${value} as json)`;
     }
 
-    public compileRandom(seed: string|number): string {
+    public override compileRandom(seed: string|number): string {
         return `RAND(${seed})`;
     }
 
@@ -90,7 +91,7 @@ export default class MySqlGrammar extends Grammar {
         return value;
     }
 
-    public compileInsert(query: Builder, values: unknown[]): string {
+    public override compileInsert(query: Builder, values: unknown[]): string {
         if (values.length === 0) {
             values = [[]];
         }
@@ -98,8 +99,8 @@ export default class MySqlGrammar extends Grammar {
         return super.compileInsert(query, values);
     }
 
-    protected compileUpdateColumns(query: Builder, values: unknown[]): string {
-        return values.map((value, key) => {
+    protected override compileUpdateColumns(query: Builder, values: Record<string, string|number|Expression>): string {
+        return Object.entries(values).map(([key, value]) => {
             if (this.isJsonSelector(key)) {
                 return this.compileJsonUpdateColumn(key, value);
             }
@@ -108,8 +109,9 @@ export default class MySqlGrammar extends Grammar {
         }).join(', ');
     }
 
-    public compileUpsert(query: Builder, values: unknown[], uniqueBy: unknown[], update: unknown[]): string {
-        const useUpsertAlias = query.connection.getConfig('use_upsert_alias');
+    public override compileUpsert(query: Builder, values: Array<string|number|Expression>, uniqueBy: unknown[], update: Array<string|number|Expression>): string {
+        //const useUpsertAlias = query.connection.getConfig('use_upsert_alias');
+        const useUpsertAlias = false;//WARNING: default override since connection is not available on this implementation. Maybe it could be a property for indicating feature availability?
 
         let sql = this.compileInsert(query, values);
 
@@ -121,18 +123,18 @@ export default class MySqlGrammar extends Grammar {
 
         const columns = update.map((value, key) => {
             if (isNaN(key)) {
-                return `${this.wrap(key)} = ${this.parameter($value)}`;
+                return `${this.wrap(key)} = ${this.parameter(value)}`;
             }
 
             return useUpsertAlias
-                ? `${this.wrap(value)} = ${this.wrap('laravel_upsert_alias')}.${this.wrap($value)}`
+                ? `${this.wrap(value)} = ${this.wrap('laravel_upsert_alias')}.${this.wrap(value)}`
                 : `${this.wrap(value)} = values(${this.wrap(value)})`;
         }).join(', ');
 
         return `${sql}${columns}`;
     }
 
-    protected compileJsonUpdateColumn(key: string, value: unknown): string {
+    protected compileJsonUpdateColumn(key: string, value: string|number|Expression|boolean|Array<string|number|Expression>): string {
         if (typeof value === 'boolean') {
             value = value ? 'true' : 'false';//TODO: toString() could be used on boolean to get same result.
         } else if (Array.isArray(value)) {
@@ -146,7 +148,7 @@ export default class MySqlGrammar extends Grammar {
         return `${field} = json_set(${field}${path}, ${value})`;
     }
 
-    protected compileUpdateWithoutJoins(query: Builder, table: string, columns: string, where: string): string {
+    protected override compileUpdateWithoutJoins(query: Builder, table: string, columns: string, where: string): string {
         let sql = super.compileUpdateWithoutJoins(query, table, columns, where);
 
         if (query._orders.length > 0) {
@@ -160,15 +162,15 @@ export default class MySqlGrammar extends Grammar {
         return sql;
     }
 
-    public prepareBindingsForUpdate(bindings: unknown[], values: Record<string, unknown>): unknown[] {
-        values = Object.entries(values)
+    public override prepareBindingsForUpdate(bindings: Bindings, values: Record<string, unknown>): unknown[] {
+        const _values = Object.entries(values)
             .filter(([column, value]) => !(this.isJsonSelector(column) && typeof value === 'boolean'))
             .map(value => Array.isArray(value) ? JSON.stringify(value) : value)
 
-        return super.prepareBindingsForUpdate(bindings, values);
+        return super.prepareBindingsForUpdate(bindings, _values);
     }
 
-    protected compileDeleteWithoutJoins(query: Builder, table: string, where: string): string {
+    protected override compileDeleteWithoutJoins(query: Builder, table: string, where: string): string {
         let sql = super.compileDeleteWithoutJoins(query, table, where);
 
         // When using MySQL, delete statements may contain order by statements and limits

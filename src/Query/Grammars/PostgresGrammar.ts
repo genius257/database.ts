@@ -1,5 +1,4 @@
-import { WhereOfType, type Builder, Having, HavingOfType } from "..";
-import Expression from "../Expression";
+import { WhereOfType, type Builder, Having, HavingOfType, Bindings } from "..";
 import Grammar from "./Grammar";
 
 export default class PostgresGrammar extends Grammar {
@@ -60,7 +59,7 @@ export default class PostgresGrammar extends Grammar {
     }
 
     /** Compile a bitwise operator where clause. */
-    protected override whereBitwise(query: Builder, where: WhereOfType<'Bitwise'>): string {
+    protected override whereBitwise(_query: Builder, where: WhereOfType<'Bitwise'>): string {
         const value = this.parameter(where.value);
 
         const operator = where.operator.replaceAll('?', '??');
@@ -69,14 +68,14 @@ export default class PostgresGrammar extends Grammar {
     }
 
     /** Compile a "where date" clause. */
-    protected override whereDate(query: Builder, where: WhereOfType<"Date">): string {
+    protected override whereDate(_query: Builder, where: WhereOfType<"Date">): string {
         const value = this.parameter(where.value);
 
         return `${this.wrap(where.column)}::date ${where.operator} ${value}`;
     }
 
     /** Compile a "where time" clause. */
-    protected override whereTime(query: Builder, where: WhereOfType<"Time">): string {
+    protected override whereTime(_query: Builder, where: WhereOfType<"Time">): string {
         const value = this.parameter(where.value);
 
         return `${this.wrap(where.column)}::time ${where.operator} ${value}`;
@@ -85,7 +84,7 @@ export default class PostgresGrammar extends Grammar {
     /**
      * Compile a date based where clause.
      */
-    protected override dateBasedWhere(type: string, query: Builder, where: WhereOfType<"Date"|"Time"|"Day"|"Month"|"Year">): string
+    protected override dateBasedWhere(type: string, _query: Builder, where: WhereOfType<"Date"|"Time"|"Day"|"Month"|"Year">): string
     {
         const value = this.parameter(where.value);
 
@@ -95,7 +94,7 @@ export default class PostgresGrammar extends Grammar {
     /**
      * Compile a "where fulltext" clause.
      */
-    public override whereFullText(query: Builder, where: WhereOfType<"Fulltext">): string
+    public override whereFullText(_query: Builder, where: WhereOfType<"Fulltext">): string
     {
         let language = where.options.language ?? 'english';
 
@@ -292,7 +291,7 @@ export default class PostgresGrammar extends Grammar {
     /**
      * Compile the columns for an update statement.
      */
-    protected override compileUpdateColumns(query: Builder, values: unknown[]): string
+    protected override compileUpdateColumns(_query: Builder, values: Record<string, unknown>): string
     {
         return values.map((value, key) => {
             const column = key.split('.').at(-1);
@@ -308,7 +307,7 @@ export default class PostgresGrammar extends Grammar {
     /**
      * Compile an "upsert" statement into SQL.
      */
-    public override compileUpsert(query: Builder, values: unknown[], uniqueBy: string[], update: unknown[]): string
+    public override compileUpsert(query: Builder, values: unknown[], uniqueBy: string[], _update: unknown[]): string
     {
         let sql = this.compileInsert(query, values);
 
@@ -450,7 +449,7 @@ export default class PostgresGrammar extends Grammar {
     /**
      * Prepare the bindings for an update statement.
      */
-    public override prepareBindingsForUpdate(bindings: unknown[], values: unknown[]): unknown[]
+    public override prepareBindingsForUpdate(bindings: Bindings, values: Record<string, unknown>): unknown[]
     {
         values = values.map((value, column) => {
             return Array.isArray(value) || (this.isJsonSelector(column) && ! this.isExpression(value))
@@ -461,7 +460,7 @@ export default class PostgresGrammar extends Grammar {
         const {select: _, ...cleanBindings} = bindings;
 
         return array_values(
-            array_merge($values, $cleanBindings.flat())
+            array_merge($values, cleanBindings.flat())
         );
     }
 
@@ -486,7 +485,7 @@ export default class PostgresGrammar extends Grammar {
 
         const alias = query._from.split(/\s+as\s+/i).at(-1);
 
-        const selectSql = this.compileSelect(query.select(`${alias}.ctid`));
+        const selectSql = this.compileSelect(query.select([`${alias}.ctid`]));
 
         return `delete from ${table} where ${this.wrap('ctid')} in (${selectSql})`;
     }
@@ -556,15 +555,15 @@ export default class PostgresGrammar extends Grammar {
     /**
      * Parse the given JSON path attribute for array keys.
      */
-    protected override parseJsonPathArrayKeys(attribute: string): string[]
+    protected parseJsonPathArrayKeys(attribute: string): string[]
     {
         if (/(\[[^\]]+\])+$/.test(attribute)) {
             const parts = attribute.match(/(\[[^\]]+\])+$/)!;
             const key = attribute.substring(0, attribute.lastIndexOf(parts[0]!));
 
-            const keys = Array.from(parts[0]!.matchAll(/\[([^\]]+)\]/));
+            const keys = Array.from(parts[0]!.matchAll(/\[([^\]]+)\]/g)).map(match => match[1] ?? '');
 
-            return [key, ...keys[1]!]
+            return [key, ...keys]
                 .filter(v => v !== '');
         }
 
@@ -574,7 +573,7 @@ export default class PostgresGrammar extends Grammar {
     /**
      * Substitute the given bindings into the given raw SQL query.
      */
-    public override substituteBindingsIntoRawSql(sql: string, bindings: unknown[]): string
+    public override substituteBindingsIntoRawSql(sql: string, bindings: Bindings): string
     {
         let query = super.substituteBindingsIntoRawSql(sql, bindings);
 

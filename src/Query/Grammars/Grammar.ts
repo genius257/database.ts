@@ -1,6 +1,7 @@
-import { HavingOfType, WhereOfType } from "..";
+import { Bindings, HavingOfType, Where, WhereOfType } from "..";
 import BaseGrammar from "../../Grammar";
 import Builder, { Aggregate, Having, Order, Union } from "../Builder";
+import Expression from "../Expression";
 import IndexHint from "../IndexHint";
 import JoinClause from "../JoinClause";
 
@@ -10,7 +11,7 @@ export default class Grammar extends BaseGrammar {
     /** The grammar specific bitwise operators. */
     protected bitwiseOperators: Readonly<string[]> = [] as const;
     /** The components that make up a select clause. */
-    protected selectComponents: Readonly<string[]> = [
+    protected selectComponents = [
         'aggregate',
         'columns',
         'from',
@@ -67,13 +68,153 @@ export default class Grammar extends BaseGrammar {
 
     /** Compile a union aggregate query into SQL. */
     protected compileUnionAggregate(query: Builder): string {
-        const sql = this.compileAggregate(query, query._aggregate);
+        const sql = this.compileAggregate(query, query._aggregate!); //FIXME: assuming aggregate is never undefined, when this method is called
 
         query._aggregate = undefined; //FIXME: source sets this to null, but nowhere is this "legal" from a type perspective, see: https://github.com/laravel/framework/blob/19b42097f542a837d3c0e6aad2abaf2b05a6cbee/src/Illuminate/Database/Query/Grammars/Grammar.php#L994
 
         return `${sql} from (${this.compileSelect(query)}) as ${this.wrapTable('temp_table')}`;
     }
 
+    /** Compile an exists statement into SQL. */
+    public compileExists(query: Builder): string {
+        const select = this.compileSelect(query);
+
+        return `select exists(${select}) as ${this.wrap('exists')}`;
+    }
+
+    /** Compile an insert statement into SQL. */
+    public compileInsert(query: Builder, values: unknown[]): string {
+        // Essentially we will force every insert to be treated as a batch insert which
+        // simply makes creating the SQL easier for us since we can utilize the same
+        // basic routine regardless of an amount of records given to us to insert.
+        const table = this.wrapTable(query._from);
+
+        if (values.length === 0) {
+            return `insert into ${table} default values`;
+        }
+
+        if (! Array.isArray(values[0])) {
+            values = [values];
+        }
+
+        const columns = this.columnize(Object.keys(values[0]));
+
+        // We need to build a list of parameter place-holders of values that are bound
+        // to the query. Each insert should have the exact same number of parameter
+        // bindings so we will loop through the record and parameterize them all.
+        const parameters = values.map((record) => {
+            return `(${this.parameterize(record)})`;
+        }).join(', ');
+
+        return `insert into $table (${columns}) values ${parameters}`;
+    }
+
+    /** Compile an insert ignore statement into SQL. */
+    public compileInsertOrIgnore(_query: Builder, _value: unknown[]): string {
+        throw new Error('This database engine does not support inserting while ignoring errors.');
+    }
+
+    /** Compile an insert and get ID statement into SQL. */
+    public compileInsertGetId(query: Builder, values: unknown[], _sequence: string): string {
+        return this.compileInsert(query, values);
+    }
+
+    /** Compile an insert statement using a subquery into SQL. */
+    public compileInsertUsing(query: Builder, columns: unknown[], sql: string): string {
+        const table = this.wrapTable(query._from);
+
+        if ((columns.length === 0) || columns === ['*']) {
+            return `insert into ${table} $sql`;
+        }
+
+        return `insert into ${table} (${this.columnize(columns)}) ${sql}`;
+    }
+
+    /** Compile an update statement into SQL. */
+    public compileUpdate(query: Builder, values: unknown[]): string {
+        const table = this.wrapTable(query._from);
+
+        const columns = this.compileUpdateColumns(query, values);
+
+        const where = this.compileWheres(query);
+
+        return (
+            (query._joins.length > 0)
+                ? this.compileUpdateWithJoins(query, table, columns, where)
+                : this.compileUpdateWithoutJoins(query, table, columns, where)
+        ).trim();
+    }
+
+    /** Compile an update statement without joins into SQL. */
+    protected compileUpdateWithoutJoins(query: Builder, table: string, columns: string, where: string): string {
+        return `update ${table} set ${columns} ${where}`;
+    }
+
+    /** Compile an update statement with joins into SQL. */
+    protected compileUpdateWithJoins(query: Builder, table: string, columns: string, where: string): string {
+        const joins = this.compileJoins(query, query._joins);
+
+        return `update ${table} ${joins} set ${columns} ${where}`;
+    }
+
+    /** Compile an "upsert" statement into SQL. */
+    public compileUpsert(query: Builder, values: unknown[], uniqueBy: unknown[], update: unknown[]): string {
+        throw new Error('This database engine does not support upserts.');
+    }
+
+    /** Prepare the bindings for an update statement. */
+    public prepareBindingsForUpdate(bindings: Bindings, values: Record<string, unknown>): unknown[] {
+        const {select: _, join: __, ...cleanBindings} = bindings;
+
+        return [...bindings.join, ...Object.values(values), ...Object.values(cleanBindings).flat()];//WARNING: this may be incorrect! see source for ref: https://github.com/laravel/framework/blob/f9812236cc64ecf51dc44f9834a46c7e66783f7a/src/Illuminate/Database/Query/Grammars/Grammar.php#L1186
+    }
+
+    /** Compile a delete statement into SQL. */
+    public compileDelete(query: Builder): string {
+        const table = this.wrapTable(query._from);
+
+        const where = this.compileWheres(query);
+
+        return (
+            query._joins.length > 0
+                ? this.compileDeleteWithJoins(query, table, where)
+                : this.compileDeleteWithoutJoins(query, table, where)
+        ).trim();
+    }
+
+    /** Compile a delete statement without joins into SQL. */
+    protected compileDeleteWithoutJoins(query: Builder, table: string, where: string): string {
+        return `delete from ${table} ${where}`;
+    }
+
+    /** Compile a delete statement with joins into SQL. */
+    protected compileDeleteWithJoins(query: Builder, table: string, where: string): string {
+        const alias = table.split(' as ').at(-1);
+
+        const joins = this.compileJoins(query, query._joins);
+
+        return `delete ${alias} from ${table} ${joins} ${where}`;
+    }
+
+    /**  Prepare the bindings for a delete statement. */
+    public prepareBindingsForDelete(bindings: Bindings): unknown[] {
+        const {select: _, ...except} = bindings;
+        return Object.values(except).flat();
+    }
+
+    /** Compile a truncate table statement into SQL. */
+    public compileTruncate(query: Builder): Record<string, unknown[]> {
+        return {
+            [`truncate table ${this.wrapTable(query._from)}`]: []
+        }
+    }
+
+    /** Compile the columns for an update statement. */
+    protected compileUpdateColumns(query: Builder, values: Record<string, unknown>): string {
+        return Object.entries(values).map(([key, value]) => `${this.wrap(key)} = ${this.parameter(value)}`).join(', ');
+    }
+
+    /** Concatenate an array of segments, removing empties. */
     protected concatenate(segments: Record<string, unknown>): string
     protected concatenate(segments: Array<unknown> | Record<string, unknown>): string {
         if (!Array.isArray(segments)) {
@@ -135,7 +276,8 @@ export default class Grammar extends BaseGrammar {
         return '';
     }
 
-    protected compileOrdersToArray(query: Builder, orders: Order[]): string[] {
+    /** Compile the query orders to an array. */
+    protected compileOrdersToArray(_query: Builder, orders: Order[]): string[] {
         return orders.map(order => order?.sql ?? `${this.wrap(order.column)} ${order.direction}`);
     }
 
@@ -205,7 +347,8 @@ export default class Grammar extends BaseGrammar {
         return '';
     }
 
-    protected compileGroups(_query: Builder, groups: Array<unknown>): string {
+    /** Compile the "group by" portions of the query. */
+    protected compileGroups(_query: Builder, groups: Array<Expression | number | string>): string {
         return `group by ${this.columnize(groups)}`;
     }
 
@@ -217,6 +360,21 @@ export default class Grammar extends BaseGrammar {
     /** Compile the lock into SQL. */
     protected compileLock(_query: Builder, value: boolean|string): string {
         return typeof value === "string" ? value : '';
+    }
+
+    /** Determine if the grammar supports savepoints. */
+    public supportsSavepoints(): boolean {
+        return true;
+    }
+
+    /** Compile the SQL statement to define a savepoint. */
+    public compileSavepoint(name: string): string {
+        return `SAVEPOINT ${name}`;
+    }
+
+    /** Compile the SQL statement to execute a savepoint rollback. */
+    public compileSavepointRollBack(name: string): string {
+        return `ROLLBACK TO SAVEPOINT ${name}`;
     }
 
     /** Compile a single union statement. */
@@ -234,6 +392,36 @@ export default class Grammar extends BaseGrammar {
     /** Remove the leading boolean from a statement. */
     protected removeLeadingBoolean(value: string): string { 
         return value.replace(/and |or /i, ''); //FIXME: varify that this matches srouce preg_replace functionality. see: https://github.com/laravel/framework/blob/5a7f2b4742b3dc7ce43acc698f400a9395801c7b/src/Illuminate/Database/Query/Grammars/Grammar.php#L1350
+    }
+
+    public substituteBindingsIntoRawSql(sql: string, bindings: Bindings): string {
+        bindings = Object.fromEntries(Object.entries(bindings).map(([key, value]) => [key, this.escape(value)]));
+
+        let query = '';
+
+        let isStringLiteral = false;
+
+        for (let i = 0; i < sql.length; i++) {
+            const char = sql[i];
+            const nextChar = sql[i + 1] ?? null;
+
+            // Single quotes can be escaped as '' according to the SQL standard while
+            // MySQL uses \'. Postgres has operators like ?| that must get encoded
+            // in PHP like ??|. We should skip over the escaped characters here.
+            if (["\'", "''", '??'].includes(`${char}${nextChar}`)) {
+                query += `${char}${nextChar}`;
+                i += 1;
+            } else if (char === "'") { // Starting / leaving string literal...
+                query += char;
+                isStringLiteral = ! isStringLiteral;
+            } else if (char === '?' && ! isStringLiteral) { // Substitutable binding...
+                query += bindings.shift() ?? '?';
+            } else { // Normal character...
+                query += char;
+            }
+        }
+
+        return query;
     }
 
     /** Get the grammar specific bitwise operators. */
@@ -261,13 +449,15 @@ export default class Grammar extends BaseGrammar {
         switch (having.type) {
             case 'Raw':
                 return having.sql;
-            case 'between':
+            // case 'between':
+            case 'Between': //FIXME: souce deviation
                 return this.compileHavingBetween(having);
             case 'Null':
                 return this.compileHavingNull(having);
             case 'NotNull':
                 return this.compileHavingNotNull(having);
-            case 'bit':
+            // case 'bit':
+            case 'Bit': //FIXME: souce deviation
                 return this.compileHavingBit(having);
             case 'Expression':
                 return this.compileHavingExpression(having);
@@ -278,7 +468,8 @@ export default class Grammar extends BaseGrammar {
         }
     }
 
-    protected compileHavingBetween(having: HavingOfType<'between'>): string {
+    /** Compile a "between" having clause. */
+    protected compileHavingBetween(having: HavingOfType<'Between'>): string {
         const between = having.not ? 'not between' : 'between';
 
         const column = this.wrap(having.column);
@@ -348,7 +539,7 @@ export default class Grammar extends BaseGrammar {
         // if it is a normal query we need to take the leading "where" of queries.
         const offset = where.query instanceof JoinClause ? 3 : 6;
 
-        return `(${this.compileWheres(where.query), offset})`;
+        return `(${this.compileWheres(where.query).substring(offset)})`;
     }
 
     /** Compile a "where null" clause. */
@@ -360,7 +551,7 @@ export default class Grammar extends BaseGrammar {
     protected whereSub(query: Builder, where: WhereOfType<'Sub'>): string {
         const select = this.compileSelect(where.query);
 
-        return this.wrap(`${where.column} ${where.operator} (${select})`);
+        return `${this.wrap(where.column)} ${where.operator} (${select})`;
     }
 
     /** Compile a clause based on an expression. */
@@ -388,12 +579,34 @@ export default class Grammar extends BaseGrammar {
     }
 
     /** Compile a "between" where clause. */
+    protected whereBetween(_query: Builder, where: WhereOfType<"Between">): string {
+        const between = where.not ? 'not between' : 'between';
+
+        const min = this.parameter(where.values[0]);
+
+        const max = this.parameter(where.values[1]);
+
+        return `${this.wrap(where.column)} ${between} ${min} and ${max}`;
+    }
+
+    /** Compile a "between" where clause. */
+    protected whereBetweenColumns(_query: Builder, where: WhereOfType<"BetweenColumns">): string {
+        const between = where.not ? 'not between' : 'between';
+
+        const min = this.wrap(where.values[0]);
+
+        const max = this.wrap(where.values[1]);
+
+        return `${this.wrap(where.column)} ${between} ${min} and ${max}`;
+    }
+
     /** Compile a where clause comparing two columns. */
     protected whereColumn(query: Builder, where: WhereOfType<'Column'>): string {
         return `${this.wrap(where.first)} ${where.operator} ${this.wrap(where.second)}`;
     }
 
-    protected whereRaw(query: Builder, where: WhereOfType<'raw'>): string {
+    /** Compile a raw where clause. */
+    protected whereRaw(query: Builder, where: WhereOfType<'Raw'>): string {
         return where.sql;
     }
 
@@ -425,6 +638,25 @@ export default class Grammar extends BaseGrammar {
         return '1 = 1';
     }
 
+    /** Compile a "where not in raw" clause. */
+    protected whereNotInRaw(query: Builder, where: WhereOfType<"NotInRaw">): string {
+        if (where.values.length > 0) {
+            return `${this.wrap(where.column)} not in (${where.values.join(', ')})`;
+        }
+
+        return '1 = 1';
+    }
+
+    /** Compile a "where in raw" clause. */
+    protected whereInRaw(query: Builder, where: WhereOfType<"InRaw">): string {
+        if (where.values.length > 0) {
+            return `${this.wrap(where.column)} in (${where.values.join(', ')})`;
+        }
+
+        return '0 = 1';
+    }
+
+    /** Compile a "where date" clause. */
     protected whereDate(query: Builder, where: WhereOfType<"Date">): string {
         return this.dateBasedWhere('date', query, where);
     }
@@ -503,6 +735,15 @@ export default class Grammar extends BaseGrammar {
         throw new Error('This database engine does not support JSON length operations.');
     }
 
+    /** Compile a "JSON value cast" statement into SQL. */
+    public compileJsonValueCast(value: string): string {
+        return value;
+    }
+
+    public whereFullText(_query: Builder, _where: WhereOfType<"Fulltext">): string {
+        throw new Error('This database engine does not support fulltext search operations.');
+    }
+
     /** Compile a "JSON contains key" statement into SQL. */
     protected compileJsonContainsKey(_column: string): string {
         throw new Error('This database engine does not support JSON contains key operations.');
@@ -519,11 +760,11 @@ export default class Grammar extends BaseGrammar {
     }
 
     protected wrapJsonFieldAndPath(column: string): [string|number, string] {
-        const parts = column.split('->', 2);
+        const [part1, ...part2] = column.split('->');//Fix for different behavior between PHP explode and JS string.prototype.split, when using limit parameter. see source: https://github.com/laravel/framework/blob/a76d8b2462bf06a8838f8b0838486d31bc497106/src/Illuminate/Database/Concerns/CompilesJsonPaths.php#L17
 
-        const field = this.wrap(parts[0]);
+        const field = this.wrap(part1!);//part1 (index zero from string.prototype.split) will always contain a string.
 
-        const path = parts.length > 1 ? `, ${this.wrapJsonPath(parts[1], '->')}` : '';
+        const path = part2.length > 0 ? `, ${this.wrapJsonPath(part2.join('->'), '->')}` : '';
 
         return [field, path];
     }
@@ -549,5 +790,10 @@ export default class Grammar extends BaseGrammar {
         }
 
         return `"${segment}"`;
+    }
+
+    /** Compile the random statement into SQL. */
+    public compileRandom(_seed: string|number): string {
+        return 'RANDOM()';
     }
 }

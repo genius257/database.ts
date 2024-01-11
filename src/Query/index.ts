@@ -4,6 +4,15 @@ import type Grammar from "./Grammars/Grammar";
 import IndexHint from "./IndexHint";
 import structuredClone from '@ungap/structured-clone';
 
+/**
+ * @see https://stackoverflow.com/a/57227253 source
+ */
+function isPureObject(input: unknown): input is Record<string, unknown> {
+    return null !== input && 
+      typeof input === 'object' &&
+      Object.getPrototypeOf(input).isPrototypeOf(Object);
+}
+
 type Unpacked<T> = T extends (infer U)[] ? U : T;
 
 type SqlValue = number | string | Uint8Array | null | boolean;
@@ -53,6 +62,7 @@ export type Order =
         direction: 'asc'|'desc',
     }
     | {type: 'Raw', sql: string}
+    | {sql: string}
 
 export type Join = { //FIXME: remove? as Builder._joins inintially was expected to be this, but turns out might be JoinClause instances instead.
     table: unknown,
@@ -63,9 +73,9 @@ export type Join = { //FIXME: remove? as Builder._joins inintially was expected 
 export type WhereOfType<T extends Where['type']> = Where & { type: T };
 
 export type Where = { type: 'Expression', column: ((query: Builder) => void) | string | unknown[] | Expression, boolean: TBoolean }
-    | { type: 'Basic', column: string, operator: string, value: unknown, boolean: TBoolean }
+    | { type: 'Basic', column: string, operator: string, value: string | number | boolean | Expression | Uint8Array, boolean: TBoolean }
     | { type: 'JsonBoolean', column: string, operator: unknown, value: unknown, boolean: TBoolean } //FIXME: all json related functionality SHOULD be removed.
-    | { type: 'Bitwise', column: string, operator: string, value: unknown, boolean: TBoolean }
+    | { type: 'Bitwise', column: string, operator: string, value: string | number | boolean | Expression | Uint8Array, boolean: TBoolean }
     | { type: 'Column', first: string | unknown[], operator: string, second: string, boolean: TBoolean }
     | {
         //type: 'raw', 
@@ -96,8 +106,8 @@ export type Where = { type: 'Expression', column: ((query: Builder) => void) | s
 export type HavingOfType<T extends Having['type']> = Having & { type: T };
 
 export type Having = { type: 'Expression', column: Expression, boolean: TBoolean }
-    | { type: 'Basic', column: Expression | Function | string, operator: unknown, value: unknown, boolean: TBoolean }
-    | { type: 'Bitwise', column: Expression | Function | string, operator: unknown, value: unknown, boolean: TBoolean }
+    | { type: 'Basic', column: Expression | ((query: Builder) => void) | string, operator: unknown, value: unknown, boolean: TBoolean }
+    | { type: 'Bitwise', column: Expression | ((query: Builder) => void) | string, operator: unknown, value: unknown, boolean: TBoolean }
     | { type: 'Nested', query: Builder, boolean: TBoolean }
     | { type: 'Null', column: string | unknown, boolean: TBoolean }
     | { type: 'NotNull', column: string | unknown, boolean: TBoolean }
@@ -255,7 +265,7 @@ export class Builder<T extends Record<string, unknown> = Record<string, unknown>
     public from(table: Builder, as: string): this
     public from(table: string | Builder, as: string|undefined = undefined): this {
         if (this.isQueryable(table)) {
-            return this.fromSub(table, as);
+            return this.fromSub(table, as!);
         }
 
         this._from = as !== undefined ? `${table} as ${as}` : table;
@@ -280,7 +290,7 @@ export class Builder<T extends Record<string, unknown> = Record<string, unknown>
         } else {
             const method = where ? 'where' : 'on';
 
-            this._joins.push(join[method](first, operator, second));
+            this._joins.push(join[method](first, operator!, second!));
 
             this.addBinding(join.getBindings(), 'join');
         }
@@ -293,11 +303,11 @@ export class Builder<T extends Record<string, unknown> = Record<string, unknown>
         return this.join(table, first, operator, second, type, true);
     }
 
-    public where(values: Array<[string, Value]|[string, string, Value]>|Record<string, Value>|Expression): this
+    public where(values: Array<[column: string, value: Value]|[column: string, operator: string, value: Value]>|Record<string, Value>|Expression): this
     public where(callback: (query: Builder) => void): this
-    public where(column: keyof T, value: Value|boolean|Expression): this//FIXME: Source diviation
-    public where(column: keyof T, operator: string, value: Value|Expression|((query: this)=>void), boolean?: TBoolean): this//FIXME: Source diviation
-    public where(column: keyof T | ((query: Builder) => void), operator: Value | null = null, value: Value | null = null, boolean = 'and'): this { //FIXME: boolean property type narrowing to known valid query boolean operators
+    public where(column: keyof T | Expression, value: Value|boolean|Expression): this//FIXME: Source diviation
+    public where(column: keyof T |  Expression, operator: string, value: Value|Expression|((query: this)=>void), boolean?: TBoolean): this//FIXME: Source diviation
+    public where(column: keyof T | ((query: Builder) => void) | Expression, operator: Value | null = null, value: Value | null = null, boolean = 'and'): this { //FIXME: boolean property type narrowing to known valid query boolean operators
         if (column instanceof Expression) {
             const type: Where['type'] = 'Expression';
 
@@ -313,7 +323,7 @@ export class Builder<T extends Record<string, unknown> = Record<string, unknown>
         // If the column is an array, we will assume it is an array of key-value pairs
         // and can add them each as a where clause. We will maintain the boolean we
         // received when the method was called and pass it into the nested where.
-        if (Array.isArray(column)) {
+        if (Array.isArray(column) || isPureObject(column)) {
             return this.addArrayOfWheres(column, boolean);
         }
 
@@ -434,7 +444,7 @@ export class Builder<T extends Record<string, unknown> = Record<string, unknown>
         return this.parseSub(query);
     }
 
-    public addSelect(columns: unknown[] | Record<string, unknown>): this {
+    public addSelect(columns: Array<string|Expression> | Record<string, string|Expression>): this {
         if (Array.isArray(columns)) {
             columns.forEach(column => {
                 if (this._columns.includes(column)) {
@@ -464,7 +474,7 @@ export class Builder<T extends Record<string, unknown> = Record<string, unknown>
         return this;
     }
 
-    protected newJoinClause(parentQuery: Builder, type: string, table: string): JoinClause {
+    protected newJoinClause(parentQuery: Builder, type: string, table: string | Expression): JoinClause {
         return new JoinClause(parentQuery, type, table);
     }
 
@@ -802,7 +812,7 @@ export class Builder<T extends Record<string, unknown> = Record<string, unknown>
         return this.whereNotIn(column, values, 'or');
     }
 
-    public whereIntegerInRaw(column: string, values: unknown[], boolean: TBoolean = 'and', not: boolean = false): this {
+    public whereIntegerInRaw(column: string, values: (number|string)[], boolean: TBoolean = 'and', not: boolean = false): this {
         const type: Where['type'] = not ? 'NotInRaw' : 'InRaw';
 
         values = values.flat();
@@ -1645,13 +1655,13 @@ export class Builder<T extends Record<string, unknown> = Record<string, unknown>
 
 export class JoinClause extends Builder {
     public type: string;
-    public table: string;
+    public table: string | Expression;
     //protected parentConnection: ConnectionInterface;
     protected parentGrammar: Grammar;
     //protected parentProcessor: Processor;
     protected parentClass: typeof Builder;
 
-    public constructor(parentQuery: Builder, type: string, table: string) {
+    public constructor(parentQuery: Builder, type: string, table: string | Expression) {
         const grammar = parentQuery.getGrammar();
 
         super(grammar);

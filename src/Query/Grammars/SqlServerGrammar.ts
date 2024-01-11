@@ -1,4 +1,4 @@
-import { Builder, Having, HavingOfType, WhereOfType } from "..";
+import { Bindings, Builder, Having, HavingOfType, WhereOfType } from "..";
 import Expression from "../Expression";
 import IndexHint from "../IndexHint";
 import Grammar from "./Grammar";
@@ -10,6 +10,7 @@ export default class SqlServerGrammar extends Grammar {
         '&', '&=', '|', '|=', '^', '^=',
     ] as const;
 
+    //@ts-expect-error HACK: To get string litteral suggestions whilst parent type should be string[], to get the suggestions, it is a const.
     protected override selectComponents = [
         'aggregate',
         'columns',
@@ -32,7 +33,7 @@ export default class SqlServerGrammar extends Grammar {
     {
         // An order by clause is required for SQL Server offset to function...
         if (query._offset && (query._orders.length === 0)) {
-            query._orders.push({'sql': '(SELECT 0)'});
+            query._orders.push({sql: '(SELECT 0)'});
         }
 
         return super.compileSelect(query);
@@ -80,7 +81,7 @@ export default class SqlServerGrammar extends Grammar {
     /**
      * Compile the index hints for the query.
      */
-    protected override compileIndexHint(query: Builder, indexHint: IndexHint):string
+    protected override compileIndexHint(_query: Builder, indexHint: IndexHint):string
     {
         return indexHint.type === 'force'
                     ? `with (index(${indexHint.index}))`
@@ -90,7 +91,7 @@ export default class SqlServerGrammar extends Grammar {
     /**
      * @inheritdoc
      */
-    protected override whereBitwise(query: Builder, where: WhereOfType<"Bitwise">): string
+    protected override whereBitwise(_query: Builder, where: WhereOfType<"Bitwise">): string
     {
         const value = this.parameter(where.value);
 
@@ -102,7 +103,7 @@ export default class SqlServerGrammar extends Grammar {
     /**
      * Compile a "where date" clause.
      */
-    protected override whereDate(query: Builder, where: WhereOfType<"Date">): string
+    protected override whereDate(_query: Builder, where: WhereOfType<"Date">): string
     {
         const value = this.parameter(where.value);
 
@@ -194,7 +195,7 @@ export default class SqlServerGrammar extends Grammar {
     /**
      * Compile a having clause involving a bitwise operator.
      */
-    protected override compileHavingBitwise(having: HavingOfType<'Bitwise'>): string
+    protected compileHavingBitwise(having: HavingOfType<'Bitwise'>): string
     {
         const column = this.wrap(having.column);
 
@@ -210,7 +211,7 @@ export default class SqlServerGrammar extends Grammar {
     {
         const sql = super.compileDeleteWithoutJoins(query, table, where);
 
-        return (query._limit !== undefined) && query._limit > 0 && query._offset <= 0
+        return (query._limit !== undefined) && query._limit > 0 && (query._offset??0) <= 0
                         ? sql.replace('delete', `delete top (${query._limit})`)
                         : sql;
     }
@@ -230,7 +231,7 @@ export default class SqlServerGrammar extends Grammar {
     {
         limit = Math.round(limit);//here we make sure it's a INT
 
-        if (limit && query._offset > 0) {
+        if (limit && (query._offset??0) > 0) {
             return `fetch next ${limit} rows only`;
         }
 
@@ -300,7 +301,7 @@ export default class SqlServerGrammar extends Grammar {
 
         let sql = `merge ${this.wrapTable(query._from)} `;
 
-        const $parameters = values.map((record) => {
+        const parameters = values.map((record) => {
             return `(${this.parameterize(record)})`;
         }).join(', ');
 
@@ -313,13 +314,13 @@ export default class SqlServerGrammar extends Grammar {
         sql += `on ${on} `;
 
         if (update) {
-            update = update.map((value, key) => {
+            const _update = update.map((value, key) => {
                 return is_numeric(key)
                     ? `${this.wrap(value)} = ${this.wrap(`laravel_source.${value}`)}`
                     : `${this.wrap(key)} = ${this.parameter(value)}`;
             }).join(', ');
 
-            sql += `when matched then update set ${update} `;
+            sql += `when matched then update set ${_update} `;
         }
 
         sql += `when not matched then insert (${columns}) values (${columns});`;
@@ -330,11 +331,15 @@ export default class SqlServerGrammar extends Grammar {
     /**
      * Prepare the bindings for an update statement.
      */
-    public override prepareBindingsForUpdate(bindings: unknown[], $values: unknown[]): unknown[]
+    public override prepareBindingsForUpdate(bindings: Bindings, values: Record<string, unknown>): unknown[]
     {
-        const {select: _, cleanBindings} = bindings;
+        // eslint-disable-next-line @typescript-eslint/no-unused-vars
+        const {select: _, ...cleanBindings} = bindings;
 
-        return Object.values({...values, ...cleanBindings.flat()});
+        return Object.values({
+            ...values,
+            ...Object.fromEntries(Object.entries(cleanBindings).map(([key, value]) => [key, value.flat()])), //simulating source Arr::flatten($cleanBindings) https://github.com/laravel/framework/blob/4989e6de076688ade265e2f1970ab6f0c1b60fcb/src/Illuminate/Database/Query/Grammars/SqlServerGrammar.php#L443
+        });
     }
 
     /**
@@ -393,16 +398,16 @@ export default class SqlServerGrammar extends Grammar {
     public override wrapTable(table: Expression|string): string
     {
         if (! this.isExpression(table)) {
-            return this.wrapTableValuedFunction(super.wrapTable(table));
+            return this.wrapTableValuedFunction(super.wrapTable(table).toString());
         }
 
-        return this.getValue(table);
+        return this.getValue(table).toString();
     }
 
     /**
      * Wrap a table in keyword identifiers.
      */
-    protected override wrapTableValuedFunction(table: string): string
+    protected wrapTableValuedFunction(table: string): string
     {
         let matches;
         if ((matches = table.match(/^(.+?)(\(.*?\))]$/)) !== null) {

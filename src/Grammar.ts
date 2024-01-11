@@ -88,7 +88,7 @@ export default abstract class Grammar {
     }
 
     /** Get the appropriate query parameter place-holder for a value. */
-    public parameter(value: Expression|string|number) {
+    public parameter(value: Expression|string|number|Uint8Array) {
         return this.isExpression(value) ? this.getValue(value) : '?';
     }
 

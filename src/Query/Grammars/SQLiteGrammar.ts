@@ -1,3 +1,4 @@
+import { Bindings } from "..";
 import type Builder from "../Builder";
 import {WhereOfType} from "../Builder";
 import IndexHint from "../IndexHint";
@@ -160,7 +161,7 @@ export default class SQLiteGrammar extends Grammar {
         return `update ${table} set ${columns} where ${this.wrap('rowid')} in (${selectSql})`;
     }
 
-    public override prepareBindingsForUpdate(bindings: unknown[], values: unknown[]): unknown[] {
+    public override prepareBindingsForUpdate(bindings: Bindings, values: Record<string, unknown>): unknown[] {
         const groups = this.groupJsonColumnsForUpdate(values);
 
         values = values.filter((value, key) => !this.isJsonSelector(key)).merge($groups).map(function ($value) {
@@ -200,6 +201,6 @@ export default class SQLiteGrammar extends Grammar {
     protected override wrapJsonSelector(value: string): string {
         const [field, path] = this.wrapJsonFieldAndPath(value);
 
-        return `json_extract(${field}.${path})`;
+        return `json_extract(${field}${path})`;
     }
 }

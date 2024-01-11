@@ -1134,6 +1134,8 @@ test('WhereIntegerInRaw', () => {
     expect(builder.toSql()).toBe('select * from "users" where "id" in (1, 2)');
     expect(builder.getBindings()).toStrictEqual([]);
 
+    //TS values type is updated to no longer allow objects like this, because it just made no sense.
+    /*
     builder = getBuilder();
     builder.select(['*']).from('users').whereIntegerInRaw('id', [//FIXME: bindings of objects where the key is discarded anwyways should not be allowed!
         {'id': '1a'},
@@ -1142,6 +1144,7 @@ test('WhereIntegerInRaw', () => {
     ]);
     expect(builder.toSql()).toBe('select * from "users" where "id" in (1, 2, 3)');
     expect(builder.getBindings()).toStrictEqual([]);
+    */
 })
 
 test('OrWhereIntegerInRaw', () =>
@@ -4090,19 +4093,19 @@ test('JsonPathEscaping', () =>
 test('MySqlWrappingJson', () =>
 {
     let builder = getMysqlBuilder();
-    builder.select(['*']).from('users').whereRaw('items.\'$."price"\' = 1');
-    expect(builder.toSql()).toBe('select * from `users` where items.\'$."price"\' = 1');
+    builder.select(['*']).from('users').whereRaw('items->\'$."price"\' = 1');
+    expect(builder.toSql()).toBe('select * from `users` where items->\'$."price"\' = 1');
 
     builder = getMysqlBuilder();
-    builder.select(['items->price']).from('users').where('users.items.price', '=', 1).orderBy('items.price');
+    builder.select(['items->price']).from('users').where('users.items->price', '=', 1).orderBy('items->price');
     expect(builder.toSql()).toBe('select json_unquote(json_extract(`items`, \'$."price"\')) from `users` where json_unquote(json_extract(`users`.`items`, \'$."price"\')) = ? order by json_unquote(json_extract(`items`, \'$."price"\')) asc');
 
     builder = getMysqlBuilder();
-    builder.select(['*']).from('users').where('items.price.in_usd', '=', 1);
+    builder.select(['*']).from('users').where('items->price->in_usd', '=', 1);
     expect(builder.toSql()).toBe('select * from `users` where json_unquote(json_extract(`items`, \'$."price"."in_usd"\')) = ?');
 
     builder = getMysqlBuilder();
-    builder.select(['*']).from('users').where('items.price.in_usd', '=', 1).where('items.age', '=', 2);
+    builder.select(['*']).from('users').where('items->price->in_usd', '=', 1).where('items->age', '=', 2);
     expect(builder.toSql()).toBe('select * from `users` where json_unquote(json_extract(`items`, \'$."price"."in_usd"\')) = ? and json_unquote(json_extract(`items`, \'$."age"\')) = ?');
 })
 
